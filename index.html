@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>НашДом CRM</title>
+
+  <link rel="manifest" href="./manifest.json?v=1.2.3">
+  <link rel="stylesheet" href="./style.css?v=1.2.3">
+</head>
+
+<body>
+  <div id="offlineIndicator" class="offline-indicator" hidden></div>
+  <div id="updateBanner" class="update-banner">
+    <span>🔄 Доступна новая версия</span>
+    <button type="button" onclick="applyAppUpdate()">Обновить</button>
+  </div>
+  <div class="app desktop-shell">
+    <header class="header">
+      <div>
+        <div class="logo">🏠 НашДом CRM</div>
+        <div class="subtitle">НашДом CRM v2.0.0<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
+        <button class="key-btn" onclick="resetAccessKey()">Сменить ключ</button>
+      </div>
+    </header>
+
+    <section id="viewHome" class="view active">
+      <main class="card">
+        <h1>Сегодня</h1>
+        <div class="home-action-row">
+          <button onclick="loadData()">Обновить</button>
+          <button id="pushButton" class="push-btn" type="button">🔔 Включить уведомления</button>
+        </div>
+        <div id="status" class="status"></div>
+        <div id="dashboardStats" class="stats-grid"></div>
+        <div id="residentInbox"></div>
+        <div id="todayRequests" class="requests-list"></div>
+      </main>
+    </section>
+
+    <section id="viewNew" class="view">
+      <main class="card">
+        <h1>Новая запись</h1>
+        <label>Тип записи</label>
+        <div class="record-type-grid">
+          <button type="button" class="record-type-btn active" data-record-type="resident" onclick="setRecordType('resident')">🏠 Заявка квартиры</button>
+          <button type="button" class="record-type-btn" data-record-type="common" onclick="setRecordType('common')">🏢 Общее имущество</button>
+          <button type="button" class="record-type-btn" data-record-type="planned" onclick="setRecordType('planned')">🛠 Плановая работа</button>
+          <button type="button" class="record-type-btn" data-record-type="completed" onclick="setRecordType('completed')">✅ Выполненная работа</button>
+        </div>
+        <input id="recordType" type="hidden" value="resident">
+        <label>1. Дом</label><select id="house" onchange="handleHouseChange()"></select>
+        <input
+          id="otherAddress"
+          class="other-address-input"
+          type="text"
+          placeholder="Введите полный адрес"
+          hidden
+        >
+        <div id="residentFields">
+          <label id="flatLabel">2. Квартира / помещение</label><input id="flat" type="text" inputmode="text" enterkeyhint="next" autocomplete="off" placeholder="Например: 63, гостиница, офис 3">
+          <div id="flatHistory" class="flat-history"></div><div id="contactSuggestions" class="contact-suggestions"></div>
+        </div>
+        <div id="commonFields" class="record-extra-fields" hidden>
+          <label>2. Место / объект</label>
+          <select id="commonLocation" onchange="toggleCustomLocation()"><option value="">— Выберите —</option></select>
+          <input id="commonLocationDetails" type="text" placeholder="Уточнение: подъезд №2, насос №1 и т. п.">
+          <input id="customLocation" type="text" placeholder="Укажите место" hidden>
+          <label>Источник</label>
+          <select id="recordSource"><option value="Обнаружено при обходе">Обнаружено при обходе</option><option value="Председатель">Председатель</option><option value="Житель">Житель</option><option value="Подрядчик">Подрядчик</option><option value="Проверка / инспекция">Проверка / инспекция</option><option value="Диспетчер">Диспетчер</option></select>
+        </div>
+        <label id="descriptionLabel">3. Заявка</label>
+        <div class="voice-field"><textarea id="description" enterkeyhint="next" placeholder="Например: течёт стояк"></textarea><button id="voiceBtn" type="button" class="voice-btn" onclick="toggleVoiceInput()">🎙 Говорить</button></div>
+        <div id="voiceStatus" class="voice-status"></div>
+        <label id="beforePhotosLabel">Фотографии «до» (до 3)</label>
+        <input id="beforePhotos" class="photo-input" type="file" accept="image/*" multiple>
+        <div id="beforePhotosPreview" class="selected-photo-preview"></div>
+        <label id="emergencyBlock" class="emergency-toggle"><input id="isEmergency" type="checkbox"><span>🚨 Аварийная заявка</span></label>
+        <div id="residentContactFields">
+          <label id="contactNameLabel">4. ФИО / как обращаться</label>
+          <input id="name" type="text" placeholder="Например: Иванов Сергей">
+          <label id="contactPhoneLabel">5. Телефон</label>
+          <input id="phone" type="tel" placeholder="Например: 89123456789">
+          <div id="commonContactHint" class="field-hint" hidden>Для общедомовой заявки можно указать жителя, председателя или другого человека, который сообщил о проблеме.</div>
+        </div>
+        <label id="planDateLabel">6. Плановый визит</label><input id="planDate" type="datetime-local">
+        <div id="newRecordStatus" class="new-record-status" role="status" aria-live="polite"></div>
+        <button id="saveBtn" type="button" onclick="saveRequest()">Сохранить</button>
+      </main>
+    </section>
+
+    <section id="viewAccepted" class="view">
+      <main class="card">
+        <h1>Активные заявки</h1>
+        <div id="acceptedRequests" class="requests-list"></div>
+      </main>
+    </section>
+
+    <section id="viewSearch" class="view">
+      <main class="card">
+        <h1>Журнал</h1>
+
+        <div class="journal-filters">
+          <button class="active" data-filter="all" onclick="setJournalFilter('all')">Все</button>
+          <button data-filter="active" onclick="setJournalFilter('active')">Активные</button>
+          <button data-filter="waiting" onclick="setJournalFilter('waiting')">Ожидают</button>
+          <button data-filter="done" onclick="setJournalFilter('done')">Выполненные</button>
+          <button data-filter="archive" onclick="setJournalFilter('archive')">Архив</button>
+          <button data-filter="trash" onclick="setJournalFilter('trash')">Корзина</button>
+          <button data-filter="other" onclick="setJournalFilter('other')">Другие адреса</button>
+        </div>
+
+        <input
+          id="searchInput"
+          type="text"
+          placeholder="Телефон, ФИО, дом, квартира, текст заявки"
+          oninput="runSearch()"
+        >
+
+        <div id="searchResults" class="requests-list search-results"></div>
+      </main>
+    </section>
+
+
+    <section id="viewHouses" class="view">
+      <main class="card">
+        <h1>Дома</h1>
+        <label>Выберите дом</label>
+        <select id="houseCardSelect" onchange="renderHouseCard()"></select>
+
+        <div id="houseReportControls" class="report-controls" hidden>
+          <h2>Отчёт по заявкам</h2>
+
+          <div class="report-grid">
+            <div>
+              <label>Период</label>
+              <select id="reportPeriod" onchange="applyReportPeriod()">
+                <option value="all">За всё время</option>
+                <option value="month" selected>Текущий месяц</option>
+                <option value="previousMonth">Прошлый месяц</option>
+                <option value="custom">Произвольный период</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Статус</label>
+              <select id="reportStatus" onchange="renderHouseRequests()">
+                <option value="all">Все заявки</option>
+                <option value="active">Активные</option>
+                <option value="waiting">Ожидают</option>
+                <option value="done">Выполненные</option>
+                <option value="emergency">Аварийные</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="report-grid">
+            <div>
+              <label>С даты</label>
+              <input id="reportDateFrom" type="date" onchange="renderHouseRequests()">
+            </div>
+            <div>
+              <label>По дату</label>
+              <input id="reportDateTo" type="date" onchange="renderHouseRequests()">
+            </div>
+          </div>
+
+          <label>Квартира</label>
+          <input id="reportFlatFilter" type="text" placeholder="Все квартиры" oninput="renderHouseRequests()">
+
+          <div class="report-actions">
+            <button type="button" class="share-report-btn" onclick="shareHouseReport()">📤 Поделиться</button>
+            <button type="button" class="print-report-btn" onclick="printHouseReport()">🖨 Печать / PDF</button>
+          </div>
+        </div>
+
+        <div id="houseCard" class="house-card-wrap"></div>
+        <div id="flatCard" class="flat-card-wrap"></div>
+      </main>
+    </section>
+
+    <div id="doneModal" class="modal">
+      <div class="modal-box">
+        <h2>Выполнение заявки</h2>
+        <label>Комментарий по выполнению</label>
+        <textarea id="doneComment" placeholder="Например: заменили прокладку, течь устранена"></textarea>
+        <label>Фотографии «после» (до 3)</label>
+        <input id="afterPhotos" class="photo-input" type="file" accept="image/*" multiple>
+        <div id="doneActionStatus" class="modal-action-status" role="status" aria-live="polite"></div>
+        <div class="modal-actions">
+          <button id="doneCancelBtn" type="button" class="modal-cancel" onclick="closeDoneModal()">Отмена</button>
+          <button id="doneConfirmBtn" type="button" class="modal-ok" onclick="confirmDoneRequest()">Выполнить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="planModal" class="modal">
+      <div class="modal-box">
+        <h2>Назначить визит</h2>
+        <label>Дата и время</label>
+        <input id="planModalDate" type="datetime-local">
+        <div class="modal-actions">
+          <button type="button" class="modal-cancel" onclick="closePlanModal()">Отмена</button>
+          <button type="button" class="modal-ok" onclick="confirmPlanRequest()">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="holdModal" class="modal">
+      <div class="modal-box">
+        <h2>Ожидание / следующее действие</h2>
+        <label>Причина ожидания</label>
+        <textarea id="holdComment" placeholder="Например: ждём согласование ТСЖ"></textarea>
+        <label>Следующее действие</label>
+        <input id="holdAction" type="text" placeholder="Например: купить радиаторные краны">
+        <label>Напомнить</label>
+        <input id="holdReminder" type="datetime-local">
+        <div class="modal-actions">
+          <button type="button" class="modal-cancel" onclick="closeHoldModal()">Отмена</button>
+          <button type="button" class="modal-ok" onclick="confirmHoldRequest()">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="emergencyModal" class="modal">
+      <div class="modal-box">
+        <h2>🚨 Этап аварии</h2>
+
+        <label>Что произошло</label>
+        <select id="emergencyStage">
+          <option value="ARRIVED">Прибыл на место</option>
+          <option value="SHUTOFF">Стояк / система перекрыты</option>
+          <option value="WAITING_ACCESS">Ожидаем доступ</option>
+          <option value="FOUND">Причина найдена / работы выполнены</option>
+          <option value="RESTORED">Вода / система открыты</option>
+          <option value="CLOSED">Авария закрыта</option>
+        </select>
+
+        <label>Комментарий</label>
+        <textarea id="emergencyComment" placeholder="Например: перекрыт стояк ХВС, ждём доступ в кв. 31"></textarea>
+
+        <label>Фотографии этапа (до 3)</label>
+        <input id="emergencyPhotos" class="photo-input" type="file" accept="image/*" multiple>
+
+        <div id="emergencyActionStatus" class="action-status" aria-live="polite"></div>
+        <div class="modal-actions">
+          <button type="button" class="modal-cancel" id="emergencyCancelBtn" onclick="closeEmergencyModal()">Отмена</button>
+          <button type="button" class="emergency-save" id="emergencyConfirmBtn" onclick="confirmEmergencyEvent()">Записать</button>
+        </div>
+      </div>
+    </div>
+
+
+    <div id="editModal" class="modal">
+      <div class="modal-box">
+        <h2>✏️ Редактировать заявку</h2>
+
+        <label>Дом</label>
+        <select id="editHouse"></select>
+
+        <label>Квартира</label>
+        <input id="editFlat" type="text">
+
+        <label>Описание</label>
+        <textarea id="editDescription"></textarea>
+
+        <label class="emergency-toggle">
+          <input id="editIsEmergency" type="checkbox">
+          <span>🚨 Аварийная заявка</span>
+        </label>
+
+        <label>ФИО</label>
+        <input id="editName" type="text">
+
+        <label>Телефон</label>
+        <input id="editPhone" type="tel">
+
+        <label>Плановая дата</label>
+        <input id="editPlanDate" type="datetime-local">
+
+        <div class="edit-photo-section">
+          <label>Уже прикреплённые фотографии</label>
+          <div id="editExistingPhotos" class="edit-existing-photos"></div>
+
+          <label>Добавить фотографии «до» (до 3)</label>
+          <input id="editBeforePhotos" class="photo-input" type="file" accept="image/*" multiple>
+          <div id="editBeforePhotosPreview" class="selected-photo-preview"></div>
+
+          <label>Добавить фотографии «после» (до 3)</label>
+          <input id="editAfterPhotos" class="photo-input" type="file" accept="image/*" multiple>
+          <div id="editAfterPhotosPreview" class="selected-photo-preview"></div>
+        </div>
+
+        <div class="request-admin-actions">
+          <button type="button" class="archive-btn" onclick="archiveCurrentRequest()">📦 В архив</button>
+          <button type="button" class="delete-btn" onclick="trashCurrentRequest()">🗑 В корзину</button>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="modal-cancel" onclick="closeEditModal()">Отмена</button>
+          <button id="editSaveBtn" type="button" class="modal-ok" onclick="confirmEditRequest()">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="reopenModal" class="modal">
+      <div class="modal-box">
+        <h2>↩ Возобновить заявку</h2>
+
+        <label>Что обнаружилось после закрытия</label>
+        <textarea id="reopenComment" placeholder="Например: после запуска снова появилась течь"></textarea>
+
+        <div class="modal-actions">
+          <button type="button" class="modal-cancel" onclick="closeReopenModal()">Отмена</button>
+          <button type="button" class="reopen-save" onclick="confirmReopenRequest()">Возобновить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="deleteModal" class="modal">
+      <div class="modal-box">
+        <h2>🗑 Удаление заявки</h2>
+        <p id="deleteRequestText" class="delete-warning"></p>
+        <p class="delete-note">Будут удалены заявка, её хронология и событие календаря.</p>
+
+        <div class="modal-actions">
+          <button type="button" class="modal-cancel" onclick="closeDeleteModal()">Отмена</button>
+          <button type="button" class="delete-confirm" onclick="confirmDeleteRequest()">Удалить</button>
+        </div>
+      </div>
+    </div>
+
+
+    <div id="dispatchModal" class="modal">
+      <div class="modal-box">
+        <h2>📤 Передать исполнителю</h2>
+
+        <label>Категория работ</label>
+        <select id="dispatchCategory">
+          <option value="Сантехника">Сантехника</option>
+          <option value="Электрика">Электрика</option>
+          <option value="Отопление / ГВС">Отопление / ГВС</option>
+          <option value="Общее имущество">Общее имущество</option>
+          <option value="Общестроительные">Общестроительные</option>
+          <option value="Другое">Другое</option>
+        </select>
+
+        <label>Исполнитель</label>
+        <input id="dispatchExecutor" type="text" placeholder="Например: Алексей, электрик">
+
+        <div class="quick-executors">
+          <button type="button" onclick="setDispatchExecutor('Сантехник')">Сантехник</button>
+          <button type="button" onclick="setDispatchExecutor('Электрик')">Электрик</button>
+          <button type="button" onclick="setDispatchExecutor('Председатель')">Председатель</button>
+          <button type="button" onclick="setDispatchExecutor('Подрядчик')">Подрядчик</button>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="modal-cancel" onclick="closeDispatchModal()">Отмена</button>
+          <button type="button" class="dispatch-save" onclick="confirmDispatchRequest()">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+
+
+    <section id="viewOther" class="view">
+      <main class="card">
+        <div class="section-heading-row">
+          <div>
+            <h1>📍 Другие адреса</h1>
+            <div class="section-subtitle">Разовые клиенты и сторонние объекты</div>
+          </div>
+          <button type="button" class="compact-action-btn" onclick="createOtherAddressRequest()">➕ Новая заявка</button>
+        </div>
+
+        <div id="otherAddressesEmpty" class="empty-box" hidden>
+          Других адресов пока нет. Создай первую заявку через кнопку «Новая заявка».
+        </div>
+
+        <div id="otherAddressControls" hidden>
+          <label>Выберите адрес</label>
+          <select id="otherAddressSelect" onchange="renderOtherAddressCard()"></select>
+
+          <div id="otherAddressCard" class="other-address-card-wrap"></div>
+        </div>
+      </main>
+    </section>
+
+    <section id="viewWalk" class="view">
+      <main class="card">
+        <h1>👀 Осмотр дома</h1>
+        <p class="section-subtitle">Быстрый осмотр по пути: отметь только те места, куда заходил.</p>
+        <label>Дом</label>
+        <select id="walkHouse" onchange="handleWalkHouseChange(); renderInspectionAreas()"></select>
+        <input id="walkOtherAddress" class="other-address-input" type="text" placeholder="Введите полный адрес" hidden>
+
+        <label>Что осмотрено</label>
+        <div id="inspectionAreas" class="inspection-area-grid"></div>
+        <div class="inspection-quick-row">
+          <button type="button" class="inspection-secondary" onclick="selectInspectionCommon()">Подвал + ИТП</button>
+          <button type="button" class="inspection-secondary" onclick="clearInspectionAreas()">Снять отметки</button>
+        </div>
+
+        <label>Результат / замечания</label>
+        <textarea id="walkDescription" placeholder="Можно оставить пустым — сохранится «Замечаний нет». Например: закрыты слуховые окна; повреждена изоляция ГВС."></textarea>
+        <button id="walkVoiceBtn" type="button" class="voice-btn" onclick="toggleWalkVoice()">🎙 Говорить</button>
+        <div id="walkVoiceStatus" class="voice-status"></div>
+
+        <label>Фотографии (до 3)</label>
+        <input id="walkPhotos" class="photo-input" type="file" accept="image/*" multiple>
+        <button id="walkSaveBtn" type="button" onclick="saveHouseInspection()">✓ Сохранить осмотр</button>
+
+        <div id="inspectionRecent" class="inspection-recent"></div>
+      </main>
+    </section>
+    <section id="viewMore" class="view">
+      <main class="card">
+        <h1>Ещё</h1>
+        <div class="more-menu-grid">
+          <button type="button" onclick="showView('houses')"><span>🏢</span><strong>Дома</strong><small>Карточки домов и отчёты</small></button>
+          <button type="button" onclick="showView('other')"><span>📍</span><strong>Другие адреса</strong><small>Разовые заявки вне списка домов</small></button>
+          <button type="button" onclick="showView('walk')"><span>👀</span><strong>Осмотр дома</strong><small>Быстрая отметка подвала, ИТП, чердака и подъездов</small></button>
+        </div>
+      </main>
+    </section>
+
+    <nav class="bottom-nav desktop-sidebar">
+      <button class="active" data-view="home" onclick="showView('home')"><span class="nav-icon">🏠</span><span>Сегодня</span></button>
+      <button data-view="new" onclick="showView('new')"><span class="nav-icon">➕</span><span>Новая</span></button>
+      <button data-view="accepted" onclick="showView('accepted')"><span class="nav-icon">📋</span><span>Активные</span></button>
+      <button data-view="search" onclick="showView('search')"><span class="nav-icon">🔍</span><span>Журнал</span></button>
+      <button data-view="more" onclick="showView('more')"><span class="nav-icon">☰</span><span>Ещё</span></button>
+    </nav>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzVrcm54k04A7vSHsUedjAQJ5yVynVeLpXXs4DFNW4d0mT7OpQdwNbUnvGoeI6L3bSrvA/exec';
+  </script>
+  <div id="photoLightbox" class="photo-lightbox" onclick="closePhotoLightbox(event)">
+    <button type="button" class="photo-lightbox-close" onclick="closePhotoLightbox(event)">×</button>
+    <button type="button" id="photoLightboxPrev" class="photo-lightbox-nav photo-lightbox-prev" onclick="showPreviousPhoto(event)" aria-label="Предыдущее фото">‹</button>
+    <div class="photo-lightbox-content" onclick="event.stopPropagation()">
+      <div id="photoLightboxLoader" class="photo-lightbox-loader">Загрузка…</div>
+      <img id="photoLightboxImage" src="" alt="Фото заявки" ondblclick="togglePhotoZoom(event)">
+      <div id="photoLightboxError" class="photo-lightbox-error" hidden>Не удалось открыть фотографию</div>
+      <div class="photo-lightbox-tools"><button type="button" onclick="zoomPhotoOut(event)" aria-label="Уменьшить">−</button><span id="photoLightboxZoomLabel">100%</span><button type="button" onclick="zoomPhotoIn(event)" aria-label="Увеличить">+</button></div>
+      <div id="photoLightboxCounter" class="photo-lightbox-counter"></div>
+    </div>
+    <button type="button" id="photoLightboxNext" class="photo-lightbox-nav photo-lightbox-next" onclick="showNextPhoto(event)" aria-label="Следующее фото">›</button>
+  </div>
+
+  <script src="./app.js?v=2.0.0"></script>
+  <script type="module" src="firebase-push.js"></script>
+
+  <script>
+    window.pendingServiceWorker = null;
+
+    function showUpdateBanner(worker) {
+      window.pendingServiceWorker = worker;
+      const banner = document.getElementById('updateBanner');
+      if (banner) banner.classList.add('visible');
+    }
+
+    function applyAppUpdate() {
+      if (window.pendingServiceWorker) {
+        window.pendingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
+      } else {
+        location.reload();
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      let refreshing = false;
+
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        if (refreshing) return;
+        refreshing = true;
+        location.reload();
+      });
+
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./service-worker.js', { scope: './' })
+          .then(function(registration) {
+            if (registration.waiting) showUpdateBanner(registration.waiting);
+
+            registration.addEventListener('updatefound', function() {
+              const worker = registration.installing;
+              if (!worker) return;
+
+              worker.addEventListener('statechange', function() {
+                if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                  showUpdateBanner(worker);
+                }
+              });
+            });
+
+            registration.update();
+            setInterval(function() { registration.update(); }, 30 * 60 * 1000);
+          })
+          .catch(function(error) {
+            console.error('Service worker registration failed:', error);
+          });
+      });
+    }
+  </script>
+
+</body>
+</html>

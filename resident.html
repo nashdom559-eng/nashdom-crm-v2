@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2563eb">
+  <title>Передать заявку</title>
+  <link rel="stylesheet" href="./resident.css?v=1.0.1">
+</head>
+<body>
+  <main class="resident-app">
+    <section class="resident-header">
+      <div class="resident-logo">🏠 НашДом</div>
+      <div>Передать заявку по обслуживанию дома</div>
+    </section>
+
+    <section class="resident-card">
+      <div id="residentHouse" class="resident-house">Проверяем ссылку…</div>
+      <div id="residentError" class="resident-message error"></div>
+
+      <form id="residentForm" hidden>
+        <label>Квартира</label>
+        <input id="residentFlat" type="text" inputmode="numeric" required placeholder="Например: 63">
+
+        <label>Как к вам обращаться</label>
+        <input id="residentName" type="text" required placeholder="Например: Сергей">
+
+        <label>Телефон</label>
+        <input id="residentPhone" type="tel" required placeholder="+7 912 345-67-89">
+
+        <label>Что случилось</label>
+        <select id="residentCategory" required>
+          <option value="">— Выберите —</option>
+          <option value="Сантехника">Сантехника</option>
+          <option value="Электрика">Электрика</option>
+          <option value="Отопление / ГВС">Отопление / горячая вода</option>
+          <option value="Общее имущество">Подъезд / подвал / общее имущество</option>
+          <option value="Другое">Другое</option>
+        </select>
+
+        <label>Опишите проблему</label>
+        <textarea id="residentDescription" required placeholder="Например: не работает свет на лестничной площадке"></textarea>
+
+        <label class="resident-emergency-toggle">
+          <input id="residentEmergency" type="checkbox">
+          <span>🚨 Аварийная ситуация</span>
+        </label>
+        <div class="resident-hint">Если вода активно течёт, есть запах газа, искрение или другая непосредственная опасность — не ждите ответа через форму, звоните в аварийную службу.</div>
+
+        <button id="residentSubmit" type="submit">Отправить заявку</button>
+      </form>
+
+      <div id="residentSuccess" class="resident-success" hidden></div>
+    </section>
+  </main>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzVrcm54k04A7vSHsUedjAQJ5yVynVeLpXXs4DFNW4d0mT7OpQdwNbUnvGoeI6L3bSrvA/exec';
+  </script>
+  <script src="./resident.js?v=1.0.1"></script>
+</body>
+</html>

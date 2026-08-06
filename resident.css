@@ -1,0 +1,25 @@
+:root{--blue:#2563eb;--bg:#f3f4f6;--text:#111827;--muted:#6b7280;--border:#d1d5db}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+.resident-app{max-width:560px;margin:0 auto;padding:12px}
+.resident-header{padding:16px;border-radius:16px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:white;box-shadow:0 8px 20px rgba(37,99,235,.25)}
+.resident-logo{font-size:22px;font-weight:800;margin-bottom:4px}
+.resident-card{margin-top:12px;padding:16px;border-radius:16px;background:white;box-shadow:0 8px 20px rgba(0,0,0,.06)}
+.resident-house{font-size:22px;font-weight:800;margin-bottom:14px}
+label{display:block;margin:13px 0 5px;font-size:14px;font-weight:800}
+input,textarea,button{width:100%;padding:13px;border:1px solid var(--border);border-radius:12px;font:inherit}
+textarea{min-height:120px;resize:vertical}
+button{margin-top:14px;border:0;background:var(--blue);color:white;font-weight:800}
+button:disabled{background:#9ca3af}
+.resident-emergency-toggle{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #fecaca;border-radius:12px;background:#fef2f2}
+.resident-emergency-toggle input{width:22px;height:22px;margin:0;padding:0}
+.resident-emergency-toggle span{color:#991b1b;font-size:16px}
+.resident-hint{margin-top:8px;color:var(--muted);font-size:12px;line-height:1.4}
+.resident-message{display:none;padding:11px;border-radius:11px}
+.resident-message.error{background:#fee2e2;color:#b91c1c}
+.resident-success{text-align:center;padding:18px 4px}
+.success-icon{display:grid;place-items:center;width:58px;height:58px;margin:0 auto 12px;border-radius:50%;background:#dcfce7;color:#166534;font-size:34px;font-weight:800}
+.resident-success h1{font-size:23px}
+.resident-success p{color:#475569}
+
+.resident-photo-input { width:100%; padding:12px; border:1px dashed #94a3b8; border-radius:12px; background:#f8fafc; }

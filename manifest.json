@@ -1,0 +1,60 @@
+{
+  "id": "/nashdom-crm-app/",
+  "name": "НашДом CRM",
+  "short_name": "НашДом",
+  "description": "Заявки, выполненные работы и осмотры обслуживаемых домов",
+  "lang": "ru-RU",
+  "start_url": "./?app=v2.0.0",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "portrait-primary",
+  "background_color": "#f3f4f6",
+  "theme_color": "#2563eb",
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "shortcuts": [
+    {
+      "name": "Новая заявка",
+      "short_name": "Новая",
+      "url": "./?view=new",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Активные заявки",
+      "short_name": "Активные",
+      "url": "./?view=accepted",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
