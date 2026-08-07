@@ -1205,3 +1205,11 @@ button.is-saving::before { content: '⏳ '; }
 
 /* v2.0 — быстрые осмотры и история дома */
 .inspection-area-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0 12px}.inspection-check{display:flex;align-items:center;gap:9px;margin:0;padding:11px;border:1px solid #dbe3ee;border-radius:12px;background:#f8fafc;font-weight:700}.inspection-check input{width:22px;height:22px;margin:0;padding:0}.inspection-quick-row,.house-quick-tabs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}.inspection-secondary,.house-quick-tabs button{margin:0;background:#e2e8f0;color:#334155}.house-quick-tabs{grid-template-columns:repeat(4,1fr)}.house-quick-tabs button{font-size:12px;padding:9px 4px}.house-compact-feed,.inspection-recent{display:grid;gap:8px}.compact-history-item{padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.compact-history-item>div{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.compact-history-item strong{font-size:12px;color:#64748b;white-space:nowrap}.compact-history-item span{font-weight:800;text-align:right}.compact-history-item p{margin:7px 0 0;white-space:pre-wrap;line-height:1.35;font-size:14px}@media(max-width:430px){.inspection-area-grid{grid-template-columns:1fr}.house-quick-tabs{grid-template-columns:repeat(2,1fr)}}
+
+
+/* v2.0.1 — явные поля разового адреса */
+.other-address-wrap { margin-top: 8px; }
+.other-address-wrap[hidden] { display: none !important; }
+.other-address-wrap:not([hidden]) { display: block !important; }
+.other-address-wrap label { margin-top: 8px; }
+#otherAddress, #editOtherAddress { width:100%; }

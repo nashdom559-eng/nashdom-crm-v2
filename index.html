@@ -10,8 +10,8 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <title>НашДом CRM</title>
 
-  <link rel="manifest" href="./manifest.json?v=1.2.3">
-  <link rel="stylesheet" href="./style.css?v=1.2.3">
+  <link rel="manifest" href="./manifest.json?v=2.0.1">
+  <link rel="stylesheet" href="./style.css?v=2.0.1">
 </head>
 
 <body>
@@ -24,7 +24,7 @@
     <header class="header">
       <div>
         <div class="logo">🏠 НашДом CRM</div>
-        <div class="subtitle">НашДом CRM v2.0.0<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
+        <div class="subtitle">НашДом CRM v2.0.1<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
         <button class="key-btn" onclick="resetAccessKey()">Сменить ключ</button>
       </div>
     </header>
@@ -55,13 +55,16 @@
         </div>
         <input id="recordType" type="hidden" value="resident">
         <label>1. Дом</label><select id="house" onchange="handleHouseChange()"></select>
-        <input
-          id="otherAddress"
-          class="other-address-input"
-          type="text"
-          placeholder="Введите полный адрес"
-          hidden
-        >
+        <div id="otherAddressWrap" class="other-address-wrap" hidden>
+          <label for="otherAddress">Адрес</label>
+          <input
+            id="otherAddress"
+            class="other-address-input"
+            type="text"
+            placeholder="Например: Ленина 80"
+            autocomplete="street-address"
+          >
+        </div>
         <div id="residentFields">
           <label id="flatLabel">2. Квартира / помещение</label><input id="flat" type="text" inputmode="text" enterkeyhint="next" autocomplete="off" placeholder="Например: 63, гостиница, офис 3">
           <div id="flatHistory" class="flat-history"></div><div id="contactSuggestions" class="contact-suggestions"></div>
@@ -261,7 +264,11 @@
         <h2>✏️ Редактировать заявку</h2>
 
         <label>Дом</label>
-        <select id="editHouse"></select>
+        <select id="editHouse" onchange="toggleEditOtherAddressField()"></select>
+        <div id="editOtherAddressWrap" class="other-address-wrap" hidden>
+          <label for="editOtherAddress">Адрес</label>
+          <input id="editOtherAddress" class="other-address-input" type="text" placeholder="Например: Ленина 80" autocomplete="street-address">
+        </div>
 
         <label>Квартира</label>
         <input id="editFlat" type="text">
@@ -300,6 +307,7 @@
           <button type="button" class="archive-btn" onclick="archiveCurrentRequest()">📦 В архив</button>
           <button type="button" class="delete-btn" onclick="trashCurrentRequest()">🗑 В корзину</button>
         </div>
+        <div id="editActionStatus" class="modal-action-status" role="status" aria-live="polite"></div>
         <div class="modal-actions">
           <button type="button" class="modal-cancel" onclick="closeEditModal()">Отмена</button>
           <button id="editSaveBtn" type="button" class="modal-ok" onclick="confirmEditRequest()">Сохранить</button>
@@ -454,7 +462,7 @@
     <button type="button" id="photoLightboxNext" class="photo-lightbox-nav photo-lightbox-next" onclick="showNextPhoto(event)" aria-label="Следующее фото">›</button>
   </div>
 
-  <script src="./app.js?v=2.0.0"></script>
+  <script src="./app.js?v=2.0.1"></script>
   <script type="module" src="firebase-push.js"></script>
 
   <script>
@@ -510,4 +518,4 @@
   </script>
 
 </body>
-</html>
+</html> 

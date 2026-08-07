@@ -1,10 +1,10 @@
 {
-  "id": "/nashdom-crm-app/",
+  "id": "/",
   "name": "НашДом CRM",
   "short_name": "НашДом",
   "description": "Заявки, выполненные работы и осмотры обслуживаемых домов",
   "lang": "ru-RU",
-  "start_url": "./?app=v2.0.0",
+  "start_url": "./?app=v2.0.1",
   "scope": "./",
   "display": "standalone",
   "display_override": [

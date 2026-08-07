@@ -325,7 +325,7 @@ function fillEditHouseSelect() {
   const select = document.getElementById('editHouse');
   if (!select) return;
 
-  const currentValue = select.value;
+  const currentValue = getEditHouseValue();
   select.innerHTML = '';
 
   (CRM.data.houses || []).forEach(function(house) {
@@ -335,7 +335,48 @@ function fillEditHouseSelect() {
     select.appendChild(option);
   });
 
-  if (currentValue) select.value = currentValue;
+  const otherOption = document.createElement('option');
+  otherOption.value = '__OTHER__';
+  otherOption.textContent = 'Другой адрес';
+  select.appendChild(otherOption);
+
+  if (currentValue) setEditHouseValue(currentValue);
+  else toggleEditOtherAddressField();
+}
+
+function setEditHouseValue(houseValue) {
+  const select = document.getElementById('editHouse');
+  const input = document.getElementById('editOtherAddress');
+  if (!select) return;
+  const value = String(houseValue || '').trim();
+  const known = (CRM.data.houses || []).includes(value);
+  if (known) {
+    select.value = value;
+    if (input) input.value = '';
+  } else if (value) {
+    select.value = '__OTHER__';
+    if (input) input.value = value;
+  } else {
+    select.value = '';
+    if (input) input.value = '';
+  }
+  toggleEditOtherAddressField();
+}
+
+function toggleEditOtherAddressField() {
+  const select = document.getElementById('editHouse');
+  const wrap = document.getElementById('editOtherAddressWrap');
+  const input = document.getElementById('editOtherAddress');
+  if (!select || !wrap) return;
+  const isOther = select.value === '__OTHER__';
+  wrap.hidden = !isOther;
+  wrap.style.display = isOther ? 'block' : 'none';
+  if (isOther && input) window.setTimeout(function(){ input.focus(); }, 60);
+}
+
+function getEditHouseValue() {
+  const selected = getValue('editHouse');
+  return selected === '__OTHER__' ? getValue('editOtherAddress') : selected;
 }
 
 
@@ -438,13 +479,19 @@ function isCommonPropertyRequest(req){return req.category==='Общее имущ
 function toggleOtherAddressField() {
   const select = document.getElementById('house');
   const input = document.getElementById('otherAddress');
+  const wrap = document.getElementById('otherAddressWrap');
   const flat = document.getElementById('flat');
   const flatLabel = document.getElementById('flatLabel');
 
   if (!select || !input) return;
 
   const isOther = select.value === '__OTHER__';
+  if (wrap) {
+    wrap.hidden = !isOther;
+    wrap.style.display = isOther ? 'block' : 'none';
+  }
   input.hidden = !isOther;
+  input.style.display = isOther ? 'block' : 'none';
 
   if (flatLabel) {
     flatLabel.textContent = isOther
@@ -1633,7 +1680,7 @@ function openEditModal(rowNumber) {
 
   CRM.state.currentEditRowNumber = rowNumber;
 
-  setValue('editHouse', req.house || '');
+  setEditHouseValue(req.house || '');
   setValue('editFlat', req.flat || '');
   setValue('editDescription', req.description || '');
   setValue('editName', req.name || '');
@@ -1671,7 +1718,7 @@ function confirmEditRequest() {
 
   const data = {
     rowNumber: rowNumber,
-    house: getValue('editHouse'),
+    house: getEditHouseValue(),
     flat: getValue('editFlat'),
     description: getValue('editDescription'),
     name: getValue('editName'),
@@ -1681,9 +1728,16 @@ function confirmEditRequest() {
   };
 
   if (!data.house || !data.flat || !data.description) {
-    showStatus('Дом, квартира и описание обязательны', true);
+    const msg = !data.house ? 'Укажи дом или адрес' : !data.flat ? 'Укажи квартиру / помещение' : 'Заполни описание';
+    const box = document.getElementById('editActionStatus');
+    if (box) { box.textContent = msg; box.classList.add('error'); }
+    showStatus(msg, true);
+    const target = !data.house ? (getValue('editHouse') === '__OTHER__' ? document.getElementById('editOtherAddress') : document.getElementById('editHouse')) : !data.flat ? document.getElementById('editFlat') : document.getElementById('editDescription');
+    if (target) { target.classList.add('field-error'); target.focus(); setTimeout(function(){target.classList.remove('field-error');},1800); }
     return;
   }
+  const editStatus = document.getElementById('editActionStatus');
+  if (editStatus) { editStatus.textContent = ''; editStatus.classList.remove('error'); }
 
   if (!beginActionFeedback(
     btn,
@@ -2259,7 +2313,9 @@ function clearNewRequestForm() {
   setValue('otherAddress', '');
 
   const otherAddress = document.getElementById('otherAddress');
-  if (otherAddress) otherAddress.hidden = true;
+  if (otherAddress) { otherAddress.hidden = true; otherAddress.style.display = 'none'; }
+  const otherAddressWrap = document.getElementById('otherAddressWrap');
+  if (otherAddressWrap) { otherAddressWrap.hidden = true; otherAddressWrap.style.display = 'none'; }
   const customLocation = document.getElementById('customLocation');
   if (customLocation) customLocation.hidden = true;
 
@@ -3821,6 +3877,10 @@ async function saveHouseInspection(){
     if(files.length){
       await uploadRequestPhotos(files,result.rowNumber,result.id,'before',text=>{if(btn)btn.textContent=text;});
     }
+    // Закрываем осмотр явно. Новый backend уже создаёт осмотр выполненным,
+    // а этот вызов сохраняет правильное поведение и со старым развёртыванием Apps Script.
+    if(btn)btn.textContent='Завершаю осмотр…';
+    await apiCallPromise('closeRequest',{rowNumber:result.rowNumber,comment:resultText});
     if(btn)btn.textContent='Обновляю историю…';
     await loadDataPromise();
     clearInspectionAreas(); setValue('walkDescription',''); const inp=document.getElementById('walkPhotos'); if(inp)inp.value='';
@@ -3950,7 +4010,7 @@ function restoreNewRequestDraft() {
   setValue('commonLocationDetails', d.commonLocationDetails || ''); setValue('customLocation', d.customLocation || '');
   setValue('recordSource', d.recordSource || 'Обнаружено при обходе'); setValue('description', d.description || '');
   setChecked('isEmergency', Boolean(d.isEmergency)); setValue('name', d.name || ''); setValue('phone', d.phone || ''); setValue('planDate', d.planDate || '');
-  const other = document.getElementById('otherAddress'); if (other && d.house === '__OTHER__') other.hidden = false;
+  if (d.house === '__OTHER__') toggleOtherAddressField();
   showStatus('Черновик новой заявки восстановлен');
 }
 
