@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.2';
+const CACHE_NAME = 'nashdom-crm-v2.0.3';
 
 // Главный service worker намеренно не зависит от Firebase/gstatic.
 // Это позволяет запускать PWA из локального кеша даже при медленном или
