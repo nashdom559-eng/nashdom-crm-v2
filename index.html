@@ -10,8 +10,8 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <title>НашДом CRM</title>
 
-  <link rel="manifest" href="./manifest.json?v=2.0.2">
-  <link rel="stylesheet" href="./style.css?v=2.0.2">
+  <link rel="manifest" href="./manifest.json?v=2.0.3">
+  <link rel="stylesheet" href="./style.css?v=2.0.3">
 </head>
 
 <body>
@@ -24,7 +24,7 @@
     <header class="header">
       <div>
         <div class="logo">🏠 НашДом CRM</div>
-        <div class="subtitle">НашДом CRM v2.0.2<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
+        <div class="subtitle">НашДом CRM v2.0.3<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
         <button class="key-btn" onclick="resetAccessKey()">Сменить ключ</button>
       </div>
     </header>
@@ -34,7 +34,29 @@
         <h1>Сегодня</h1>
         <div class="home-action-row">
           <button onclick="loadData()">Обновить</button>
-          <button id="pushButton" class="push-btn" type="button">🔔 Включить уведомления</button>
+          <button id="pushButton" class="push-btn" type="button" hidden>🔔 Включить уведомления</button>
+<script>
+  (function() {
+    const button = document.getElementById('pushButton');
+    const icon = document.getElementById('pushStatusIcon');
+
+    const enabled =
+      localStorage.getItem('nashdom_push_enabled') === '1' &&
+      'Notification' in window &&
+      Notification.permission === 'granted';
+
+    if (icon) {
+      icon.textContent = enabled ? '🔔' : '🔕';
+      icon.title = enabled ? 'Уведомления включены' : 'Уведомления выключены';
+      icon.classList.toggle('enabled', enabled);
+    }
+
+    if (button) {
+      button.hidden = enabled;
+      button.style.display = enabled ? 'none' : '';
+    }
+  })();
+</script>
         </div>
         <div id="status" class="status"></div>
         <div id="dashboardStats" class="stats-grid"></div>
@@ -462,7 +484,7 @@
     <button type="button" id="photoLightboxNext" class="photo-lightbox-nav photo-lightbox-next" onclick="showNextPhoto(event)" aria-label="Следующее фото">›</button>
   </div>
 
-  <script src="./app.js?v=2.0.2"></script>
+  <script src="./app.js?v=2.0.3"></script>
   <script>
     // Firebase загружаем только после показа интерфейса: его внешние модули
     // больше не задерживают DOMContentLoaded и холодный запуск CRM.
@@ -472,7 +494,7 @@
         const script = document.createElement('script');
         script.id = 'firebasePushModule';
         script.type = 'module';
-        script.src = './firebase-push.js?v=2.0.2';
+        script.src = './firebase-push.js?v=2.0.3';
         document.body.appendChild(script);
       };
       if ('requestIdleCallback' in window) {
