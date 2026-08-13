@@ -51,15 +51,12 @@ async function enablePush() {
       return;
     }
 
-    setButton("Подключаю…", true);
+    setButton("Подключаю…", true, false);
 
-    // Push использует отдельный worker, чтобы Firebase/gstatic не участвовали
-    // в холодном запуске основной PWA.
     const registration = await navigator.serviceWorker.register(
-      './firebase-messaging-sw.js',
-      { scope: './firebase-push-scope/' }
+      "./firebase-messaging-sw.js",
+      { scope: "./firebase-push-scope/" }
     );
-    await registration.update().catch(function() {});
 
     const app = initializeApp(firebaseConfig);
     const messaging = getMessaging(app);
@@ -104,7 +101,6 @@ async function enablePush() {
         });
       }
     });
-
   } catch (error) {
     console.error(error);
     setPushStatus(false);
@@ -118,15 +114,15 @@ if (button) {
 
   const enabled =
     localStorage.getItem("nashdom_push_enabled") === "1" &&
+    "Notification" in window &&
     Notification.permission === "granted";
 
   setPushStatus(enabled);
 
   if (enabled) {
+    // Уведомления уже включены: при обычном старте ничего не
+    // регистрируем заново и не запрашиваем FCM-токен повторно.
     setButton("🔔 Уведомления включены", true, true);
-    // Мигрируем уже включённые уведомления на отдельный push-worker автоматически.
-    // Выполняется после загрузки интерфейса и не влияет на холодный запуск.
-    setTimeout(function() { enablePush(); }, 0);
   } else {
     localStorage.removeItem("nashdom_push_enabled");
     setButton("🔔 Включить уведомления", false, false);
