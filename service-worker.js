@@ -1,8 +1,8 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.3';
+const CACHE_NAME = 'nashdom-crm-v2.0.4';
 
-// Главный service worker намеренно не зависит от Firebase/gstatic.
-// Это позволяет запускать PWA из локального кеша даже при медленном или
-// недоступном хостинге. Push обслуживается отдельным service worker.
+// Оболочка PWA запускается из локального кеша. В v2.0.4 дополнительно
+// подмешиваем маленький startup-патч: последние данные CRM показываются
+// сразу из localStorage, а сервер обновляет их уже в фоне.
 const APP_SHELL = [
   './',
   './index.html',
@@ -39,9 +39,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 function isRemoteDataRequest(url) {
@@ -78,52 +76,184 @@ function updateNavigationInBackground(request) {
     .catch(() => null);
 }
 
+const FAST_DATA_PATCH = String.raw`
+(function(){
+  if (window.__nashdomFastDataV204) return;
+  window.__nashdomFastDataV204 = true;
+
+  function readCacheEntry(){
+    try {
+      var item = JSON.parse(localStorage.getItem('nashdom_app_data_cache_v1') || 'null');
+      return item && item.data ? item : null;
+    } catch(e) { return null; }
+  }
+
+  function ageText(savedAt){
+    if (!savedAt) return '';
+    var sec = Math.max(0, Math.round((Date.now() - savedAt) / 1000));
+    if (sec < 60) return 'только что';
+    var min = Math.round(sec / 60);
+    if (min < 60) return min + ' мин назад';
+    var h = Math.round(min / 60);
+    if (h < 24) return h + ' ч назад';
+    return Math.round(h / 24) + ' дн назад';
+  }
+
+  function quietStatus(text, error){
+    try { if (typeof showStatus === 'function') showStatus(text || '', !!error); } catch(e) {}
+  }
+
+  function applyCachedImmediately(){
+    var entry = readCacheEntry();
+    if (!entry) return null;
+    try {
+      if (typeof applyAppData === 'function') applyAppData(entry.data);
+      if (typeof restoreNewRequestDraft === 'function') restoreNewRequestDraft();
+    } catch(e) {}
+    return entry;
+  }
+
+  function networkRefresh(silent, hadCache){
+    var settled = false;
+    var slowTimer = setTimeout(function(){
+      if (!settled && hadCache && !silent) {
+        quietStatus('⚡ Показаны сохранённые данные · сервер обновляется в фоне');
+      }
+    }, 2500);
+
+    try {
+      apiCall('getAppData', null, function(data){
+        settled = true;
+        clearTimeout(slowTimer);
+        try {
+          if (typeof applyAppData === 'function') applyAppData(data);
+          if (typeof saveCachedAppData === 'function') saveCachedAppData(CRM.data);
+          if (typeof restoreNewRequestDraft === 'function') restoreNewRequestDraft();
+        } catch(e) {}
+        if (!silent) quietStatus('');
+      }, function(error){
+        settled = true;
+        clearTimeout(slowTimer);
+        if (hadCache) {
+          if (!silent) quietStatus('📴 Работаю по сохранённым данным · сервер временно недоступен');
+        } else if (!silent) {
+          quietStatus('Ошибка загрузки: ' + error, true);
+        }
+      });
+    } catch(e) {
+      settled = true;
+      clearTimeout(slowTimer);
+      if (!hadCache && !silent) quietStatus('Ошибка загрузки: ' + (e.message || e), true);
+    }
+  }
+
+  // Переопределяем обычную загрузку ДО DOMContentLoaded. Старый обработчик
+  // app.js вызовет уже эту функцию: сначала локальные данные, затем сеть.
+  loadData = function(options){
+    var silent = !!(options && options.silent);
+    var entry = applyCachedImmediately();
+    var hadCache = !!entry;
+
+    if (hadCache && !silent) {
+      quietStatus('⚡ Последние данные: ' + ageText(entry.savedAt));
+    }
+
+    if (!navigator.onLine) {
+      if (hadCache) {
+        if (!silent) quietStatus('📴 Офлайн · показаны данные ' + ageText(entry.savedAt));
+      } else if (!silent) {
+        quietStatus('📴 Нет интернета. Новую заявку можно сохранить — она отправится позже.', true);
+      }
+      return;
+    }
+
+    // Даём браузеру сначала отрисовать экран, потом идём в Google Apps Script.
+    setTimeout(function(){ networkRefresh(silent, hadCache); }, hadCache ? 120 : 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var subtitle = document.querySelector('.subtitle');
+    if (subtitle && subtitle.textContent.indexOf('v2.0.3') !== -1) {
+      // Меняем только текстовый узел, не трогая иконку уведомлений.
+      Array.from(subtitle.childNodes).forEach(function(node){
+        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace('v2.0.3','v2.0.4');
+      });
+    }
+  });
+})();
+`;
+
+async function injectFastDataPatch(response, requestUrl) {
+  if (!response) return response;
+  const url = new URL(requestUrl);
+  if (url.pathname.endsWith('/resident.html')) return response;
+
+  try {
+    const html = await response.text();
+    if (html.includes('__nashdomFastDataV204')) {
+      return new Response(html, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      });
+    }
+    const patched = html.replace('</body>', '<script>' + FAST_DATA_PATCH + '<\/script></body>');
+    return new Response(patched, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers
+    });
+  } catch (e) {
+    return response;
+  }
+}
+
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-
-  // Данные CRM и внешние библиотеки не кешируем этим worker'ом.
   if (isRemoteDataRequest(url)) return;
 
-  // Навигация: мгновенно показываем локальную оболочку, сеть обновляет кеш в фоне.
   if (request.mode === 'navigate') {
-    event.respondWith(
-      cachedShellForNavigation(request).then(cached => {
-        if (cached) {
-          event.waitUntil(updateNavigationInBackground(request));
-          return cached;
-        }
-        return fetch(request);
-      })
-    );
+    // Обновление кеша запускаем независимо от того, что сразу вернули пользователю.
+    event.waitUntil(updateNavigationInBackground(request));
+    event.respondWith((async () => {
+      const cached = await cachedShellForNavigation(request);
+      if (cached) return injectFastDataPatch(cached, request.url);
+      const network = await fetch(request);
+      return injectFastDataPatch(network, request.url);
+    })());
     return;
   }
 
-  // Статика: cache-first. Сеть тихо обновляет копию для следующего запуска.
   if (url.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(request, { ignoreSearch: true }).then(cached => {
-        const networkUpdate = fetch(request)
-          .then(response => {
-            if (response && response.ok) {
-              caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
-            }
-            return response;
-          })
-          .catch(() => null);
+    event.respondWith((async () => {
+      const cached = await caches.match(request, { ignoreSearch: true });
+      if (cached) {
+        // Не ждём сеть перед выдачей локального файла.
+        event.waitUntil(
+          fetch(request)
+            .then(response => {
+              if (response && response.ok) {
+                return caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
+              }
+            })
+            .catch(() => null)
+        );
+        return cached;
+      }
 
-        if (cached) {
-          event.waitUntil(networkUpdate);
-          return cached;
+      try {
+        const response = await fetch(request);
+        if (response && response.ok) {
+          const clone = response.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, clone)));
         }
-
-        return networkUpdate.then(response => {
-          if (response) return response;
-          return caches.match(request, { ignoreSearch: true });
-        });
-      })
-    );
+        return response;
+      } catch (e) {
+        return caches.match(request, { ignoreSearch: true });
+      }
+    })());
   }
 });
