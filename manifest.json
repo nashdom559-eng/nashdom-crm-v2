@@ -4,7 +4,7 @@
   "short_name": "НашДом",
   "description": "Заявки, выполненные работы и осмотры обслуживаемых домов",
   "lang": "ru-RU",
-  "start_url": "./?app=v2.0.1",
+  "start_url": "./?app=v2.0.2",
   "scope": "./",
   "display": "standalone",
   "display_override": [

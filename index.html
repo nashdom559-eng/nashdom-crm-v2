@@ -10,8 +10,8 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <title>НашДом CRM</title>
 
-  <link rel="manifest" href="./manifest.json?v=2.0.1">
-  <link rel="stylesheet" href="./style.css?v=2.0.1">
+  <link rel="manifest" href="./manifest.json?v=2.0.2">
+  <link rel="stylesheet" href="./style.css?v=2.0.2">
 </head>
 
 <body>
@@ -24,7 +24,7 @@
     <header class="header">
       <div>
         <div class="logo">🏠 НашДом CRM</div>
-        <div class="subtitle">НашДом CRM v2.0.1<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
+        <div class="subtitle">НашДом CRM v2.0.2<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
         <button class="key-btn" onclick="resetAccessKey()">Сменить ключ</button>
       </div>
     </header>
@@ -462,8 +462,26 @@
     <button type="button" id="photoLightboxNext" class="photo-lightbox-nav photo-lightbox-next" onclick="showNextPhoto(event)" aria-label="Следующее фото">›</button>
   </div>
 
-  <script src="./app.js?v=2.0.1"></script>
-  <script type="module" src="firebase-push.js"></script>
+  <script src="./app.js?v=2.0.2"></script>
+  <script>
+    // Firebase загружаем только после показа интерфейса: его внешние модули
+    // больше не задерживают DOMContentLoaded и холодный запуск CRM.
+    window.addEventListener('load', function() {
+      const loadFirebasePush = function() {
+        if (document.getElementById('firebasePushModule')) return;
+        const script = document.createElement('script');
+        script.id = 'firebasePushModule';
+        script.type = 'module';
+        script.src = './firebase-push.js?v=2.0.2';
+        document.body.appendChild(script);
+      };
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(loadFirebasePush, { timeout: 2500 });
+      } else {
+        setTimeout(loadFirebasePush, 500);
+      }
+    });
+  </script>
 
   <script>
     window.pendingServiceWorker = null;

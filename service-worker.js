@@ -1,33 +1,24 @@
-importScripts("https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging-compat.js");
+const CACHE_NAME = 'nashdom-crm-v2.0.2';
 
-firebase.initializeApp({
-  apiKey: "AIzaSyAu_IiktVtl7VQRLowbdb0zJ_slOkVK_NA",
-  authDomain: "nashdom-crm.firebaseapp.com",
-  projectId: "nashdom-crm",
-  storageBucket: "nashdom-crm.firebasestorage.app",
-  messagingSenderId: "412290588017",
-  appId: "1:412290588017:web:2fc4d1cb4d47ffd52c2ad0"
-});
-
-const messaging = firebase.messaging();
-const CACHE_NAME = 'nashdom-crm-v2.0.1';
-
+// Главный service worker намеренно не зависит от Firebase/gstatic.
+// Это позволяет запускать PWA из локального кеша даже при медленном или
+// недоступном хостинге. Push обслуживается отдельным service worker.
 const APP_SHELL = [
-  "./",
-  "./index.html",
-  "./style.css",
-  "./app.js",
-  "./firebase-push.js",
-  "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png",
-  "./resident.html",
-  "./resident.css",
-  "./resident.js"
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './firebase-push.js',
+  './firebase-messaging-sw.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './resident.html',
+  './resident.css',
+  './resident.js'
 ];
 
-self.addEventListener("install", event => {
+self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(APP_SHELL))
@@ -35,106 +26,104 @@ self.addEventListener("install", event => {
   );
 });
 
-self.addEventListener("activate", event => {
+self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
+    caches.keys()
+      .then(keys => Promise.all(
         keys
           .filter(key => key !== CACHE_NAME)
           .map(key => caches.delete(key))
-      )
-    )
+      ))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-self.addEventListener("message", event => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
 });
 
-messaging.onBackgroundMessage(payload => {
-  const notification = payload.notification || {};
-  const data = payload.data || {};
-
-  self.registration.showNotification(
-    notification.title || "Новая заявка",
-    {
-      body: notification.body || "",
-      icon: "./icon-192.png",
-      badge: "./icon-192.png",
-      tag: "resident-" + (data.requestId || Date.now()),
-      requireInteraction: data.emergency === "1",
-      data: {
-        url: data.url || "./"
-      }
-    }
+function isRemoteDataRequest(url) {
+  return (
+    url.hostname.includes('script.google.com') ||
+    url.hostname.includes('googleusercontent.com') ||
+    url.hostname.includes('gstatic.com') ||
+    url.hostname.includes('googleapis.com')
   );
-});
+}
 
-self.addEventListener("notificationclick", event => {
-  event.notification.close();
-  const url = event.notification.data && event.notification.data.url
-    ? event.notification.data.url
-    : "./";
+function cachedShellForNavigation(request) {
+  const url = new URL(request.url);
+  const isResident = url.pathname.endsWith('/resident.html');
+  const fallback = isResident ? './resident.html' : './index.html';
 
-  event.waitUntil(
-    clients.matchAll({
-      type: "window",
-      includeUncontrolled: true
-    }).then(clientList => {
-      for (const client of clientList) {
-        if ("focus" in client) {
-          client.navigate(url);
-          return client.focus();
-        }
-      }
+  return caches.match(request, { ignoreSearch: true })
+    .then(hit => hit || caches.match(fallback, { ignoreSearch: true }));
+}
 
-      if (clients.openWindow) {
-        return clients.openWindow(url);
-      }
+function updateNavigationInBackground(request) {
+  const url = new URL(request.url);
+  const isResident = url.pathname.endsWith('/resident.html');
+  const cacheKey = isResident ? './resident.html' : './index.html';
+
+  return fetch(request)
+    .then(response => {
+      if (!response || !response.ok) return response;
+      return caches.open(CACHE_NAME).then(cache => {
+        cache.put(cacheKey, response.clone());
+        return response;
+      });
     })
-  );
-});
+    .catch(() => null);
+}
 
-self.addEventListener("fetch", event => {
+self.addEventListener('fetch', event => {
   const request = event.request;
-
-  if (request.method !== "GET") return;
+  if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
 
-  if (
-    url.hostname.includes("script.google.com") ||
-    url.hostname.includes("googleusercontent.com") ||
-    url.hostname.includes("gstatic.com")
-  ) {
-    return;
-  }
+  // Данные CRM и внешние библиотеки не кешируем этим worker'ом.
+  if (isRemoteDataRequest(url)) return;
 
-  if (request.mode === "navigate") {
+  // Навигация: мгновенно показываем локальную оболочку, сеть обновляет кеш в фоне.
+  if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put("./", copy));
-          return response;
-        })
-        .catch(() => caches.match("./"))
+      cachedShellForNavigation(request).then(cached => {
+        if (cached) {
+          event.waitUntil(updateNavigationInBackground(request));
+          return cached;
+        }
+        return fetch(request);
+      })
     );
     return;
   }
 
-  event.respondWith(
-    fetch(request)
-      .then(response => {
-        if (response && response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+  // Статика: cache-first. Сеть тихо обновляет копию для следующего запуска.
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      caches.match(request, { ignoreSearch: true }).then(cached => {
+        const networkUpdate = fetch(request)
+          .then(response => {
+            if (response && response.ok) {
+              caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
+            }
+            return response;
+          })
+          .catch(() => null);
+
+        if (cached) {
+          event.waitUntil(networkUpdate);
+          return cached;
         }
-        return response;
+
+        return networkUpdate.then(response => {
+          if (response) return response;
+          return caches.match(request, { ignoreSearch: true });
+        });
       })
-      .catch(() => caches.match(request))
-  );
+    );
+  }
 });

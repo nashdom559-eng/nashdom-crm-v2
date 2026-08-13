@@ -53,7 +53,14 @@ async function enablePush() {
 
     setButton("Подключаю…", true);
 
-    const registration = await navigator.serviceWorker.ready;
+    // Push использует отдельный worker, чтобы Firebase/gstatic не участвовали
+    // в холодном запуске основной PWA.
+    const registration = await navigator.serviceWorker.register(
+      './firebase-messaging-sw.js',
+      { scope: './firebase-push-scope/' }
+    );
+    await registration.update().catch(function() {});
+
     const app = initializeApp(firebaseConfig);
     const messaging = getMessaging(app);
 
@@ -117,6 +124,9 @@ if (button) {
 
   if (enabled) {
     setButton("🔔 Уведомления включены", true, true);
+    // Мигрируем уже включённые уведомления на отдельный push-worker автоматически.
+    // Выполняется после загрузки интерфейса и не влияет на холодный запуск.
+    setTimeout(function() { enablePush(); }, 0);
   } else {
     localStorage.removeItem("nashdom_push_enabled");
     setButton("🔔 Включить уведомления", false, false);
