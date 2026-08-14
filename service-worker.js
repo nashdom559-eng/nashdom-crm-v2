@@ -1,13 +1,13 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.4';
+const CACHE_NAME = 'nashdom-crm-v2.0.5';
 
-// Оболочка PWA запускается из локального кеша. В v2.0.4 дополнительно
-// подмешиваем маленький startup-патч: последние данные CRM показываются
-// сразу из localStorage, а сервер обновляет их уже в фоне.
+// Оболочка PWA запускается из локального кеша. v2.0.5 сохраняет быстрый
+// offline-first старт и добавляет длинную диктовку до ручной остановки.
 const APP_SHELL = [
   './',
   './index.html',
   './style.css',
   './app.js',
+  './voice-patch.js',
   './firebase-push.js',
   './firebase-messaging-sw.js',
   './manifest.json',
@@ -78,8 +78,8 @@ function updateNavigationInBackground(request) {
 
 const FAST_DATA_PATCH = String.raw`
 (function(){
-  if (window.__nashdomFastDataV204) return;
-  window.__nashdomFastDataV204 = true;
+  if (window.__nashdomFastDataV205) return;
+  window.__nashdomFastDataV205 = true;
 
   function readCacheEntry(){
     try {
@@ -147,8 +147,6 @@ const FAST_DATA_PATCH = String.raw`
     }
   }
 
-  // Переопределяем обычную загрузку ДО DOMContentLoaded. Старый обработчик
-  // app.js вызовет уже эту функцию: сначала локальные данные, затем сеть.
   loadData = function(options){
     var silent = !!(options && options.silent);
     var entry = applyCachedImmediately();
@@ -167,38 +165,39 @@ const FAST_DATA_PATCH = String.raw`
       return;
     }
 
-    // Даём браузеру сначала отрисовать экран, потом идём в Google Apps Script.
     setTimeout(function(){ networkRefresh(silent, hadCache); }, hadCache ? 120 : 0);
   };
 
   document.addEventListener('DOMContentLoaded', function(){
     var subtitle = document.querySelector('.subtitle');
-    if (subtitle && subtitle.textContent.indexOf('v2.0.3') !== -1) {
-      // Меняем только текстовый узел, не трогая иконку уведомлений.
+    if (subtitle) {
       Array.from(subtitle.childNodes).forEach(function(node){
-        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace('v2.0.3','v2.0.4');
+        if (node.nodeType === Node.TEXT_NODE) {
+          node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.5');
+        }
       });
     }
   });
 })();
 `;
 
-async function injectFastDataPatch(response, requestUrl) {
+async function injectRuntimePatches(response, requestUrl) {
   if (!response) return response;
   const url = new URL(requestUrl);
   if (url.pathname.endsWith('/resident.html')) return response;
 
   try {
-    const html = await response.text();
-    if (html.includes('__nashdomFastDataV204')) {
-      return new Response(html, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers
-      });
+    let html = await response.text();
+
+    if (!html.includes('__nashdomFastDataV205')) {
+      html = html.replace('</body>', '<script>' + FAST_DATA_PATCH + '<\/script></body>');
     }
-    const patched = html.replace('</body>', '<script>' + FAST_DATA_PATCH + '<\/script></body>');
-    return new Response(patched, {
+
+    if (!html.includes('voice-patch.js')) {
+      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.5"></script></body>');
+    }
+
+    return new Response(html, {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers
@@ -216,13 +215,12 @@ self.addEventListener('fetch', event => {
   if (isRemoteDataRequest(url)) return;
 
   if (request.mode === 'navigate') {
-    // Обновление кеша запускаем независимо от того, что сразу вернули пользователю.
     event.waitUntil(updateNavigationInBackground(request));
     event.respondWith((async () => {
       const cached = await cachedShellForNavigation(request);
-      if (cached) return injectFastDataPatch(cached, request.url);
+      if (cached) return injectRuntimePatches(cached, request.url);
       const network = await fetch(request);
-      return injectFastDataPatch(network, request.url);
+      return injectRuntimePatches(network, request.url);
     })());
     return;
   }
@@ -231,7 +229,6 @@ self.addEventListener('fetch', event => {
     event.respondWith((async () => {
       const cached = await caches.match(request, { ignoreSearch: true });
       if (cached) {
-        // Не ждём сеть перед выдачей локального файла.
         event.waitUntil(
           fetch(request)
             .then(response => {
