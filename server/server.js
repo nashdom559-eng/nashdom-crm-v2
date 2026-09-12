@@ -8,6 +8,10 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const API_SECRET = process.env.API_SECRET || '';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/data/uploads';
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'nashdom-crm';
+const FIREBASE_CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || '';
+const FIREBASE_PRIVATE_KEY = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+const PUBLIC_APP_URL = process.env.PUBLIC_APP_URL || 'https://nashdom559-eng.github.io/nashdom-crm-app/';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -34,6 +38,45 @@ async function findRequest(p,c=pool){ if(p.requestId||p.id) return (await c.quer
 async function timelineMap(){ const {rows}=await pool.query('SELECT * FROM timeline ORDER BY created_at'); const m={}; for(const r of rows){ (m[r.request_id]??=[]).push({id:r.id,operationId:r.operation_id,date:fmt(r.created_at),rawDate:raw(r.created_at),stage:r.stage,comment:r.comment,executor:r.executor}); } return m; }
 function mapReq(r,m){ return {rowNumber:Number(r.legacy_row_number||0),id:r.id,date:fmt(r.created_at),rawDate:raw(r.created_at),house:r.house,flat:r.flat,name:r.name,phone:r.phone,category:r.category,description:r.description,priority:r.priority,status:r.status,executor:r.executor,planDate:fmt(r.plan_date),rawPlanDate:raw(r.plan_date),doneDate:fmt(r.done_date),rawDoneDate:raw(r.done_date),control:r.control,comment:r.comment,calendarEventId:r.calendar_event_id,source:r.source,photosBefore:r.photos_before||[],photosAfter:r.photos_after||[],isEmergency:r.category==='Аварийная',emergencyTimeline:m[r.id]||[]}; }
 async function getAppData(){ const m=await timelineMap(); const [rq,h,c]=await Promise.all([pool.query('SELECT * FROM requests ORDER BY created_at DESC'),pool.query('SELECT * FROM houses ORDER BY id'),pool.query('SELECT * FROM contacts ORDER BY id')]); const all=rq.rows.map(r=>mapReq(r,m)); const profiles={}; for(const x of h.rows)profiles[x.name]={entrances:x.entrances,itp:x.itp,extras:x.extras||[]}; return {version:'3.0.0',houses:h.rows.map(x=>x.name),houseProfiles:profiles,contacts:c.rows.map(x=>({house:x.house,flat:x.flat,name:x.name,phone:x.phone,role:x.role,note:x.note})),acceptedRequests:all.filter(x=>![S.DONE,S.RESIDENT_NEW,S.REJECTED,S.ARCHIVED,S.DELETED].includes(x.status)),residentRequests:all.filter(x=>x.status===S.RESIDENT_NEW),allRequests:all}; }
+
+let firebaseAccessTokenCache = { token:'', expiresAt:0 };
+function base64Url(value){ return Buffer.from(value).toString('base64url'); }
+async function getFirebaseAccessToken(){
+  if(firebaseAccessTokenCache.token && Date.now() < firebaseAccessTokenCache.expiresAt - 300000) return firebaseAccessTokenCache.token;
+  if(!FIREBASE_CLIENT_EMAIL || !FIREBASE_PRIVATE_KEY) throw new Error('Firebase push не настроен: нет FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY');
+  const now=Math.floor(Date.now()/1000);
+  const header=base64Url(JSON.stringify({alg:'RS256',typ:'JWT'}));
+  const claim=base64Url(JSON.stringify({iss:FIREBASE_CLIENT_EMAIL,scope:'https://www.googleapis.com/auth/firebase.messaging',aud:'https://oauth2.googleapis.com/token',iat:now,exp:now+3600}));
+  const unsigned=`${header}.${claim}`;
+  const signature=crypto.sign('RSA-SHA256',Buffer.from(unsigned),FIREBASE_PRIVATE_KEY).toString('base64url');
+  const assertion=`${unsigned}.${signature}`;
+  const body=new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion});
+  const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok || !data.access_token) throw new Error(`Firebase OAuth ${response.status}: ${data.error_description||data.error||'не удалось получить токен'}`);
+  firebaseAccessTokenCache={token:data.access_token,expiresAt:Date.now()+Number(data.expires_in||3600)*1000};
+  return data.access_token;
+}
+async function sendPushNotifications(requestData){
+  const {rows}=await pool.query('SELECT token FROM push_tokens WHERE active=true ORDER BY updated_at DESC');
+  const tokens=rows.map(x=>String(x.token||'').trim()).filter(Boolean);
+  if(!tokens.length)return;
+  const accessToken=await getFirebaseAccessToken();
+  const isEmergency=Boolean(requestData.isEmergency);
+  const title=isEmergency?'🚨 АВАРИЙНАЯ ЗАЯВКА':'📨 Новая заявка';
+  const body=[requestData.house||'',requestData.flat?`кв. ${requestData.flat}`:'',requestData.category||'',requestData.description||''].filter(Boolean).join(' · ').slice(0,240);
+  const endpoint=`https://fcm.googleapis.com/v1/projects/${encodeURIComponent(FIREBASE_PROJECT_ID)}/messages:send`;
+  await Promise.all(tokens.map(async token=>{
+    try{
+      const payload={message:{token,notification:{title,body},data:{url:PUBLIC_APP_URL,requestId:String(requestData.requestId||''),emergency:isEmergency?'1':'0'},webpush:{notification:{icon:`${PUBLIC_APP_URL.replace(/\/$/,'')}/icon-192.png`,badge:`${PUBLIC_APP_URL.replace(/\/$/,'')}/icon-192.png`,tag:`resident-${String(requestData.requestId||Date.now())}`,requireInteraction:isEmergency},fcm_options:{link:PUBLIC_APP_URL}}}};
+      const response=await fetch(endpoint,{method:'POST',headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      if(response.ok)return;
+      const text=await response.text();
+      if(response.status===404 || response.status===410 || /UNREGISTERED/i.test(text)) await pool.query('UPDATE push_tokens SET active=false,updated_at=now() WHERE token=$1',[token]);
+      console.error(`FCM error ${response.status}: ${text.slice(0,500)}`);
+    }catch(e){ console.error('FCM send error:',e.message||e); }
+  }));
+}
 
 async function savePhoto(data,resident=false){ const r=await findRequest(data); if(!r)throw new Error('Заявка для фотографии не найдена'); if(resident){ const house=RESIDENT_HOUSES[String(data.houseCode||'').trim().toLowerCase()]; if(!house||r.house!==house)throw new Error('Заявка не найдена'); }
  const kind=data.kind==='after'?'after':'before'; const field=kind==='after'?'photos_after':'photos_before'; const list=Array.isArray(r[field])?r[field]:[]; if(list.length>=3)throw new Error('Можно прикрепить не больше 3 фотографий'); const match=String(data.dataUrl||'').match(/^data:([^;]+);base64,(.+)$/); if(!match)throw new Error('Некорректные данные фотографии'); const ext=(match[1]||'image/jpeg').includes('png')?'png':'jpg'; const id=crypto.randomUUID(); const fileName=`${r.id}_${kind}_${Date.now()}_${safeFileName(data.fileName||('photo.'+ext))}`; fs.writeFileSync(path.join(UPLOAD_DIR,fileName),Buffer.from(match[2],'base64')); const item={id,name:fileName,url:'/uploads/'+encodeURIComponent(fileName),thumb:'/uploads/'+encodeURIComponent(fileName),local:true}; list.push(item); await pool.query(`UPDATE requests SET ${field}=$1::jsonb WHERE id=$2`,[JSON.stringify(list),r.id]); return {ok:true,photo:item,rowNumber:r.legacy_row_number}; }
@@ -65,7 +108,7 @@ async function action(name,p){
 app.get('/health',async(req,res)=>{ try{await pool.query('SELECT 1');res.json({ok:true})}catch(e){res.status(500).json({ok:false,error:e.message})} });
 app.all('/api',async(req,res)=>{ const name=String(req.query.action||req.body?.action||''), callback=String(req.query.callback||req.body?.callback||''), p=parsePayload(req); try{
   if(name==='uploadPhoto'){ const resident=String(req.body?.resident||req.query.resident||'')==='1'; if(!resident && !auth(req))throw new Error('Доступ запрещён'); const data=Object.assign({},req.body||{},req.query||{}); const result=await savePhoto(data,resident); return photoResponse(res,{ok:true,uploadId:String(data.uploadId||''),result}); }
-  if(name==='submitResidentRequest'){ const house=RESIDENT_HOUSES[String(p.houseCode||'').trim().toLowerCase()]; if(!house)throw new Error('Ссылка для этого дома недействительна'); const flat=String(p.flat||'').trim(), name2=String(p.name||'').trim(), phone=storedPhone(p.phone), desc=String(p.description||'').trim(); if(!flat)throw new Error('Укажите квартиру'); if(!name2)throw new Error('Укажите, как к вам обращаться'); if(normalizePhone(phone).length!==11)throw new Error('Укажите корректный номер телефона'); if(!desc)throw new Error('Опишите проблему'); const c=await pool.connect(); try{ await c.query('BEGIN'); const id=await nextId(c), row=await nextRowNumber(c); await c.query("INSERT INTO requests(id,legacy_row_number,house,flat,name,phone,category,description,priority,status,source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'Житель')",[id,row,house,flat,name2,phone,p.isEmergency?'Аварийная':'',desc,String(p.category||''),S.RESIDENT_NEW]); await upsertContact(c,{house,flat,name:name2,phone}); await c.query('COMMIT'); return send(res,{ok:true,result:{ok:true,requestId:id,rowNumber:row,house,message:'Заявка отправлена'}},callback); }catch(e){await c.query('ROLLBACK');throw e}finally{c.release()} }
+  if(name==='submitResidentRequest'){ const house=RESIDENT_HOUSES[String(p.houseCode||'').trim().toLowerCase()]; if(!house)throw new Error('Ссылка для этого дома недействительна'); const flat=String(p.flat||'').trim(), name2=String(p.name||'').trim(), phone=storedPhone(p.phone), desc=String(p.description||'').trim(); if(!flat)throw new Error('Укажите квартиру'); if(!name2)throw new Error('Укажите, как к вам обращаться'); if(normalizePhone(phone).length!==11)throw new Error('Укажите корректный номер телефона'); if(!desc)throw new Error('Опишите проблему'); const c=await pool.connect(); try{ await c.query('BEGIN'); const id=await nextId(c), row=await nextRowNumber(c); await c.query("INSERT INTO requests(id,legacy_row_number,house,flat,name,phone,category,description,priority,status,source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'Житель')",[id,row,house,flat,name2,phone,p.isEmergency?'Аварийная':'',desc,String(p.category||''),S.RESIDENT_NEW]); await upsertContact(c,{house,flat,name:name2,phone}); await c.query('COMMIT'); try{ await sendPushNotifications({requestId:id,house,flat,category:String(p.category||''),description:desc,isEmergency:Boolean(p.isEmergency)}); }catch(pushError){ console.error('Push error:',pushError.message||pushError); } return send(res,{ok:true,result:{ok:true,requestId:id,rowNumber:row,house,message:'Заявка отправлена'}},callback); }catch(e){await c.query('ROLLBACK');throw e}finally{c.release()} }
   if(!auth(req))throw new Error('Доступ запрещён'); const result=await action(name,p); return send(res,{ok:true,result},callback);
  }catch(e){ if(name==='uploadPhoto') return photoResponse(res,{ok:false,uploadId:String(req.body?.uploadId||''),error:e.message||String(e)}); return send(res,{ok:false,error:e.message||String(e)},callback); } });
 
