@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#2563eb">
   <title>Передать заявку</title>
-  <link rel="stylesheet" href="./resident.css?v=2.0.9">
+  <link rel="stylesheet" href="./resident.css?v=2.0.11">
 </head>
 <body>
   <main class="resident-app">
@@ -19,6 +19,12 @@
       <div id="residentError" class="resident-message error"></div>
 
       <form id="residentForm" hidden>
+        <div id="residentAddressWrap" hidden>
+          <label>Адрес дома</label>
+          <input id="residentAddress" type="text" autocomplete="street-address" placeholder="Например: Революции, 38">
+          <div class="resident-photo-hint">Укажите улицу и номер дома. Обслуживающая организация проверит адрес при обработке заявки.</div>
+        </div>
+
         <label>Квартира</label>
         <input id="residentFlat" type="text" inputmode="numeric" required placeholder="Например: 63">
 
@@ -62,7 +68,7 @@
   <script>
     const API_URL = location.origin + '/api';
   </script>
-  <script src="./resident.js?v=2.0.9"></script>
+  <script src="./resident.js?v=2.0.11"></script>
   <script src="./selectel-api-patch.js?v=2.0.9"></script>
 </body>
 </html>
