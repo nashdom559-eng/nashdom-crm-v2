@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#2563eb">
   <title>Передать заявку</title>
-  <link rel="stylesheet" href="./resident.css?v=2.0.6">
+  <link rel="stylesheet" href="./resident.css?v=2.0.9">
 </head>
 <body>
   <main class="resident-app">
@@ -41,6 +41,11 @@
         <label>Опишите проблему</label>
         <textarea id="residentDescription" required placeholder="Например: не работает свет на лестничной площадке"></textarea>
 
+        <label>Фотографии <span class="resident-optional">(необязательно)</span></label>
+        <input id="residentPhotos" class="resident-photo-input" type="file" accept="image/*" multiple>
+        <div class="resident-photo-hint">Можно прикрепить до 5 фотографий.</div>
+        <div id="residentPhotoList" class="resident-photo-list"></div>
+
         <label class="resident-emergency-toggle">
           <input id="residentEmergency" type="checkbox">
           <span>🚨 Аварийная ситуация</span>
@@ -57,7 +62,7 @@
   <script>
     const API_URL = location.origin + '/api';
   </script>
-  <script src="./resident.js?v=2.0.6"></script>
-  <script src="./selectel-api-patch.js?v=2.0.6"></script>
+  <script src="./resident.js?v=2.0.9"></script>
+  <script src="./selectel-api-patch.js?v=2.0.9"></script>
 </body>
 </html>
