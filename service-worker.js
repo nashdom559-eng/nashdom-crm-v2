@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.8';
+const CACHE_NAME = 'nashdom-crm-v2.0.9';
 
 const APP_SHELL = [
   './',
@@ -174,8 +174,8 @@ async function injectRuntimePatches(response, requestUrl) {
       html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.8"></script></body>');
     }
 
-    if (!html.includes('selectel-api-patch.js?v=2.0.8')) {
-      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.8"></script></body>');
+    if (!html.includes('selectel-api-patch.js?v=2.0.9')) {
+      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.9"></script></body>');
     }
 
     return new Response(html, {
