@@ -1,6 +1,6 @@
 (function(){
-  if (window.__nashdomSelectelApiV209) return;
-  window.__nashdomSelectelApiV209 = true;
+  if (window.__nashdomSelectelApiV212) return;
+  window.__nashdomSelectelApiV212 = true;
 
   const ENDPOINT = location.origin + '/api';
 
@@ -30,15 +30,16 @@
     const residentHouseCode=String(new URLSearchParams(location.search).get('h')||'').trim().toLowerCase();
     window.jsonp=function(action,payload){return new Promise(function(resolve,reject){jsonpRequest(action,payload,'',resolve,function(error){reject(new Error(error||'Не удалось отправить заявку'));});});};
 
-    // Resident photos use a direct same-origin POST. This avoids the old hidden
-    // iframe/postMessage path which could report success without sending a request.
-    window.uploadResidentPhoto=async function(requestId,file){
+    // Resident photos use a direct same-origin POST. The per-request photo token
+    // is required for universal links where there is no fixed house code.
+    window.uploadResidentPhoto=async function(requestId,residentPhotoToken,file){
       if(typeof compressResidentPhoto!=='function') throw new Error('Модуль обработки фото не загружен');
       const photo=await compressResidentPhoto(file);
       const body=new URLSearchParams();
       body.set('action','uploadPhoto');
       body.set('resident','1');
       body.set('houseCode',residentHouseCode);
+      body.set('residentPhotoToken',String(residentPhotoToken||''));
       body.set('requestId',String(requestId||''));
       body.set('kind','before');
       body.set('fileName',photo.fileName||'resident.jpg');
