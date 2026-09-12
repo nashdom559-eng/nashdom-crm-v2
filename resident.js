@@ -16,6 +16,7 @@ const HOUSE_NAMES = {
 const params = new URLSearchParams(location.search);
 const houseCode = String(params.get('h') || '').trim().toLowerCase();
 const houseName = HOUSE_NAMES[houseCode];
+const universalMode = !houseCode;
 
 const houseBox = document.getElementById('residentHouse');
 const errorBox = document.getElementById('residentError');
@@ -24,8 +25,15 @@ const successBox = document.getElementById('residentSuccess');
 const submitButton = document.getElementById('residentSubmit');
 const photoInput = document.getElementById('residentPhotos');
 const photoList = document.getElementById('residentPhotoList');
+const addressWrap = document.getElementById('residentAddressWrap');
+const addressInput = document.getElementById('residentAddress');
 
-if (!houseName) {
+if (universalMode) {
+  houseBox.textContent = '🏠 Заявка по адресу';
+  if (addressWrap) addressWrap.hidden = false;
+  if (addressInput) addressInput.required = true;
+  form.hidden = false;
+} else if (!houseName) {
   houseBox.textContent = 'Ссылка недействительна';
   errorBox.textContent = 'Попросите у обслуживающей организации актуальную ссылку для вашего дома.';
   errorBox.style.display = 'block';
@@ -94,6 +102,14 @@ form.addEventListener('submit', async event => {
   event.preventDefault();
   errorBox.style.display = 'none';
 
+  const houseAddress = universalMode && addressInput ? addressInput.value.trim() : '';
+  if (universalMode && !houseAddress) {
+    errorBox.textContent = 'Укажите адрес дома.';
+    errorBox.style.display = 'block';
+    if (addressInput) addressInput.focus();
+    return;
+  }
+
   const phone = normalizePhone(document.getElementById('residentPhone').value);
   if (phone.length !== 11 || !phone.startsWith('7')) {
     errorBox.textContent = 'Проверьте номер телефона.';
@@ -107,6 +123,7 @@ form.addEventListener('submit', async event => {
   try {
     const result = await jsonp('submitResidentRequest', {
       houseCode,
+      houseAddress,
       flat: document.getElementById('residentFlat').value.trim(),
       name: document.getElementById('residentName').value.trim(),
       phone: '+' + phone,
@@ -121,7 +138,7 @@ form.addEventListener('submit', async event => {
     for (let i = 0; i < photos.length; i++) {
       submitButton.textContent = `Загружаем фото ${i + 1} из ${photos.length}…`;
       try {
-        await uploadResidentPhoto(result.requestId, photos[i]);
+        await uploadResidentPhoto(result.requestId, result.residentPhotoToken || '', photos[i]);
       } catch (error) {
         photoErrors++;
         console.error('Resident photo upload failed:', error);
@@ -169,7 +186,7 @@ function compressResidentPhoto(file) {
   });
 }
 
-function uploadResidentPhoto(requestId, file) {
+function uploadResidentPhoto(requestId, residentPhotoToken, file) {
   return compressResidentPhoto(file).then(photo => new Promise((resolve, reject) => {
     const uploadId = 'resident_photo_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
     const iframe = document.createElement('iframe');
@@ -178,7 +195,7 @@ function uploadResidentPhoto(requestId, file) {
     document.body.appendChild(iframe);
     const formEl = document.createElement('form');
     formEl.method = 'POST'; formEl.action = API_URL; formEl.target = uploadId; formEl.style.display = 'none';
-    const values = { action:'uploadPhoto', uploadId, resident:'1', houseCode, requestId, kind:'before', fileName:photo.fileName, dataUrl:photo.dataUrl };
+    const values = { action:'uploadPhoto', uploadId, resident:'1', houseCode, residentPhotoToken, requestId, kind:'before', fileName:photo.fileName, dataUrl:photo.dataUrl };
     Object.entries(values).forEach(([name,value]) => { const input=document.createElement('input'); input.type='hidden'; input.name=name; input.value=value; formEl.appendChild(input); });
     document.body.appendChild(formEl);
     let timer;
