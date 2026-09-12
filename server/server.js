@@ -53,7 +53,7 @@ async function getServiceAccountAccessToken(scope,cache){
   const unsigned=`${header}.${claim}`;
   const signature=crypto.sign('RSA-SHA256',Buffer.from(unsigned),FIREBASE_PRIVATE_KEY).toString('base64url');
   const assertion=`${unsigned}.${signature}`;
-  const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'urn:ietf:params:oauth2:jwt-bearer',assertion})});
+  const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion})});
   const data=await response.json().catch(()=>({}));
   if(!response.ok||!data.access_token)throw new Error(`Google OAuth ${response.status}: ${data.error_description||data.error||'не удалось получить токен'}`);
   cache.token=data.access_token; cache.expiresAt=Date.now()+Number(data.expires_in||3600)*1000; return cache.token;
