@@ -22,6 +22,8 @@ const errorBox = document.getElementById('residentError');
 const form = document.getElementById('residentForm');
 const successBox = document.getElementById('residentSuccess');
 const submitButton = document.getElementById('residentSubmit');
+const photoInput = document.getElementById('residentPhotos');
+const photoList = document.getElementById('residentPhotoList');
 
 if (!houseName) {
   houseBox.textContent = 'Ссылка недействительна';
@@ -73,6 +75,21 @@ function normalizePhone(phone) {
   return digits;
 }
 
+function selectedPhotos() {
+  return Array.from((photoInput && photoInput.files) || []).slice(0, 5);
+}
+
+function renderPhotoList() {
+  if (!photoList) return;
+  const files = selectedPhotos();
+  photoList.innerHTML = files.map((file, index) => `<div>📷 ${index + 1}. ${file.name}</div>`).join('');
+  if (photoInput && photoInput.files && photoInput.files.length > 5) {
+    photoList.innerHTML += '<div class="resident-photo-warning">Будут отправлены только первые 5 фотографий.</div>';
+  }
+}
+
+if (photoInput) photoInput.addEventListener('change', renderPhotoList);
+
 form.addEventListener('submit', async event => {
   event.preventDefault();
   errorBox.style.display = 'none';
@@ -85,7 +102,7 @@ form.addEventListener('submit', async event => {
   }
 
   submitButton.disabled = true;
-  submitButton.textContent = 'Отправляем…';
+  submitButton.textContent = 'Отправляем заявку…';
 
   try {
     const result = await jsonp('submitResidentRequest', {
@@ -98,6 +115,19 @@ form.addEventListener('submit', async event => {
       isEmergency: document.getElementById('residentEmergency').checked
     });
 
+    const photos = selectedPhotos();
+    let photoErrors = 0;
+
+    for (let i = 0; i < photos.length; i++) {
+      submitButton.textContent = `Загружаем фото ${i + 1} из ${photos.length}…`;
+      try {
+        await uploadResidentPhoto(result.requestId, photos[i]);
+      } catch (error) {
+        photoErrors++;
+        console.error('Resident photo upload failed:', error);
+      }
+    }
+
     form.hidden = true;
     successBox.hidden = false;
     successBox.innerHTML = `
@@ -105,6 +135,8 @@ form.addEventListener('submit', async event => {
       <h1>Заявка отправлена</h1>
       <p>Номер заявки: <strong>${result.requestId}</strong></p>
       <p>Мы получили ваше обращение.</p>
+      ${photos.length && !photoErrors ? `<p class="resident-photo-success">📷 Фотографий прикреплено: ${photos.length}</p>` : ''}
+      ${photoErrors ? `<p class="resident-photo-warning">Заявка отправлена, но ${photoErrors === photos.length ? 'фотографии не загрузились' : `не загрузилось фотографий: ${photoErrors}`}. При необходимости отправьте ещё одну заявку с фото.</p>` : ''}
       <button type="button" onclick="location.reload()">Отправить ещё одну заявку</button>`;
   } catch (error) {
     errorBox.textContent = error.message || String(error);
@@ -114,7 +146,6 @@ form.addEventListener('submit', async event => {
     submitButton.textContent = 'Отправить заявку';
   }
 });
-
 
 function compressResidentPhoto(file) {
   return new Promise((resolve, reject) => {
