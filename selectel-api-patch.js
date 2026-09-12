@@ -95,7 +95,7 @@
 
         if (typeof waitForPhotoConfirmation === 'function') {
           waitForPhotoConfirmation({rowNumber:payload.rowNumber,requestId:payload.requestId,kind:payload.kind,expectedCount})
-            .then(ok).catch(function(){ /* ответ iframe ещё может прийти */ });
+            .then(ok).catch(function(){});
         }
         timer = setTimeout(function(){ fail(new Error('Превышено время загрузки фото')); }, 90000);
         form.submit();
@@ -123,6 +123,8 @@
   }
 
   if (document.getElementById('residentForm')) {
+    const residentHouseCode = String(new URLSearchParams(location.search).get('h') || '').trim().toLowerCase();
+
     window.jsonp = function(action, payload) {
       return new Promise(function(resolve, reject){
         jsonpRequest(action, payload, '', resolve, function(error){ reject(new Error(error || 'Не удалось отправить заявку')); });
@@ -136,7 +138,7 @@
             const uploadId='resident_photo_'+Date.now()+'_'+Math.floor(Math.random()*100000);
             const iframe=document.createElement('iframe'); iframe.name=uploadId; iframe.style.display='none'; document.body.appendChild(iframe);
             const form=document.createElement('form'); form.method='POST'; form.action=ENDPOINT; form.target=uploadId; form.style.display='none';
-            const values={action:'uploadPhoto',uploadId,resident:'1',houseCode:window.houseCode||'',requestId,kind:'before',fileName:photo.fileName,dataUrl:photo.dataUrl};
+            const values={action:'uploadPhoto',uploadId,resident:'1',houseCode:residentHouseCode,requestId,kind:'before',fileName:photo.fileName,dataUrl:photo.dataUrl};
             Object.entries(values).forEach(function(entry){ const input=document.createElement('input'); input.type='hidden'; input.name=entry[0]; input.value=entry[1]; form.appendChild(input); });
             document.body.appendChild(form);
             let timer;
