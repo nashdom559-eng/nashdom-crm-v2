@@ -7,7 +7,8 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-seri
 .resident-card{margin-top:12px;padding:16px;border-radius:16px;background:white;box-shadow:0 8px 20px rgba(0,0,0,.06)}
 .resident-house{font-size:22px;font-weight:800;margin-bottom:14px}
 label{display:block;margin:13px 0 5px;font-size:14px;font-weight:800}
-input,textarea,button{width:100%;padding:13px;border:1px solid var(--border);border-radius:12px;font:inherit}
+input,textarea,select,button{width:100%;padding:13px;border:1px solid var(--border);border-radius:12px;font:inherit}
+select{min-height:48px;background:#fff;color:var(--text)}
 textarea{min-height:120px;resize:vertical}
 button{margin-top:14px;border:0;background:var(--blue);color:white;font-weight:800}
 button:disabled{background:#9ca3af}
