@@ -44,6 +44,9 @@
 
   if (typeof window.getAccessKey === 'function' || typeof window.apiCall === 'function') {
     window.apiCall = function(action, payload, onSuccess, onError) {
+      // В текущем интерфейсе отдельной корзины нет: кнопка удаления должна удалять окончательно.
+      if (action === 'moveRequestToTrash') action = 'deleteRequest';
+
       let token = '';
       try { token = typeof getAccessKey === 'function' ? getAccessKey() : ''; } catch (e) {}
       jsonpRequest(action, payload, token, onSuccess, function(message) {
