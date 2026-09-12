@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.9';
+const CACHE_NAME = 'nashdom-crm-v2.0.10';
 
 const APP_SHELL = [
   './',
@@ -202,6 +202,21 @@ self.addEventListener('fetch', event => {
     url.hostname.includes('gstatic.com') ||
     url.hostname.includes('googleapis.com')
   ) return;
+
+  const isResidentResource = url.origin === self.location.origin && (
+    url.pathname.endsWith('/resident.html') ||
+    url.pathname.endsWith('/resident.js') ||
+    url.pathname.endsWith('/resident.css')
+  );
+
+  if (isResidentResource) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
+        .then(response => response && response.ok ? response : Promise.reject(new Error('Resident resource unavailable')))
+        .catch(() => caches.match(request, { ignoreSearch: true }))
+    );
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.waitUntil(updateNavigationInBackground(request));
