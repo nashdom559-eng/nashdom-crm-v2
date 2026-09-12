@@ -1,6 +1,6 @@
 (function(){
-  if (window.__nashdomSelectelApiV208) return;
-  window.__nashdomSelectelApiV208 = true;
+  if (window.__nashdomSelectelApiV209) return;
+  window.__nashdomSelectelApiV209 = true;
 
   const ENDPOINT = location.origin + '/api';
 
@@ -112,11 +112,54 @@
       return typeof oldGetFullPhotoUrl === 'function' ? oldGetFullPhotoUrl(photo) : String((photo && (photo.thumb || photo.url)) || '');
     };
 
+    // Новые заявки жителей раньше не показывали photosBefore, хотя фото уже
+    // сохранялись на сервере. Добавляем ту же галерею прямо во входящую карточку.
+    if (typeof window.renderResidentInbox === 'function') {
+      window.renderResidentInbox = function() {
+        const box = document.getElementById('residentInbox');
+        if (!box || !CRM || !CRM.data) return;
+
+        const items = CRM.data.residentRequests || [];
+        if (!items.length) {
+          box.innerHTML = '';
+          return;
+        }
+
+        box.innerHTML = `
+          <div class="resident-inbox">
+            <div class="resident-inbox-title">📨 Новые от жителей <span>${items.length}</span></div>
+            <div class="resident-inbox-list">
+              ${items.map(req => `
+                <div class="resident-request-card">
+                  <div class="resident-request-top">
+                    <strong>${escapeHtml(req.house || '')}, кв. ${escapeHtml(req.flat || '—')}</strong>
+                    ${req.isEmergency ? '<span class="resident-emergency">🚨 Житель отметил как аварийную</span>' : ''}
+                  </div>
+                  ${req.priority ? `<div class="resident-category">🔧 ${escapeHtml(req.priority)}</div>` : ''}
+                  <div class="resident-person">${escapeHtml(req.name || '')}</div>
+                  ${req.phone ? `<a class="phone-link" href="tel:${phoneForCall(req.phone)}">${escapeHtml(req.phone)}</a>` : ''}
+                  <div class="resident-description">${escapeHtml(req.description || '')}</div>
+                  ${renderPhotoGallery(req.photosBefore || [], '📷 От жителя', req.rowNumber, 'before')}
+                  <div class="resident-actions">
+                    <button type="button" onclick="acceptResidentRequestUi(${Number(req.rowNumber)}, false)">✅ Принять</button>
+                    <button type="button" class="resident-emergency-btn" onclick="acceptResidentRequestUi(${Number(req.rowNumber)}, true)">🚨 Как аварийную</button>
+                    <button type="button" class="dispatch-inbox-btn" onclick="acceptAndDispatchResident(${Number(req.rowNumber)})">👷 Принять и передать</button>
+                    <button type="button" class="resident-reject-btn" onclick="rejectResidentRequestUi(${Number(req.rowNumber)})">Отклонить</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+      };
+
+      try { window.renderResidentInbox(); } catch (e) {}
+    }
+
     document.addEventListener('DOMContentLoaded', function(){
       const subtitle = document.querySelector('.subtitle');
       if (subtitle) {
         Array.from(subtitle.childNodes).forEach(function(node){
-          if(node.nodeType===Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.8');
+          if(node.nodeType===Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.9');
         });
       }
     });
