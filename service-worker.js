@@ -1,13 +1,12 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.5';
+const CACHE_NAME = 'nashdom-crm-v2.0.6';
 
-// Оболочка PWA запускается из локального кеша. v2.0.5 сохраняет быстрый
-// offline-first старт и добавляет длинную диктовку до ручной остановки.
 const APP_SHELL = [
   './',
   './index.html',
   './style.css',
   './app.js',
   './voice-patch.js',
+  './selectel-api-patch.js',
   './firebase-push.js',
   './firebase-messaging-sw.js',
   './manifest.json',
@@ -29,11 +28,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(
-        keys
-          .filter(key => key !== CACHE_NAME)
-          .map(key => caches.delete(key))
-      ))
+      .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
@@ -42,29 +37,17 @@ self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
-function isRemoteDataRequest(url) {
-  return (
-    url.hostname.includes('script.google.com') ||
-    url.hostname.includes('googleusercontent.com') ||
-    url.hostname.includes('gstatic.com') ||
-    url.hostname.includes('googleapis.com')
-  );
-}
-
 function cachedShellForNavigation(request) {
   const url = new URL(request.url);
   const isResident = url.pathname.endsWith('/resident.html');
   const fallback = isResident ? './resident.html' : './index.html';
-
-  return caches.match(request, { ignoreSearch: true })
-    .then(hit => hit || caches.match(fallback, { ignoreSearch: true }));
+  return caches.match(request, { ignoreSearch: true }).then(hit => hit || caches.match(fallback, { ignoreSearch: true }));
 }
 
 function updateNavigationInBackground(request) {
   const url = new URL(request.url);
   const isResident = url.pathname.endsWith('/resident.html');
   const cacheKey = isResident ? './resident.html' : './index.html';
-
   return fetch(request)
     .then(response => {
       if (!response || !response.ok) return response;
@@ -78,8 +61,8 @@ function updateNavigationInBackground(request) {
 
 const FAST_DATA_PATCH = String.raw`
 (function(){
-  if (window.__nashdomFastDataV205) return;
-  window.__nashdomFastDataV205 = true;
+  if (window.__nashdomFastDataV206) return;
+  window.__nashdomFastDataV206 = true;
 
   function readCacheEntry(){
     try {
@@ -116,9 +99,7 @@ const FAST_DATA_PATCH = String.raw`
   function networkRefresh(silent, hadCache){
     var settled = false;
     var slowTimer = setTimeout(function(){
-      if (!settled && hadCache && !silent) {
-        quietStatus('⚡ Показаны сохранённые данные · сервер обновляется в фоне');
-      }
+      if (!settled && hadCache && !silent) quietStatus('⚡ Показаны сохранённые данные · сервер обновляется в фоне');
     }, 2500);
 
     try {
@@ -152,9 +133,7 @@ const FAST_DATA_PATCH = String.raw`
     var entry = applyCachedImmediately();
     var hadCache = !!entry;
 
-    if (hadCache && !silent) {
-      quietStatus('⚡ Последние данные: ' + ageText(entry.savedAt));
-    }
+    if (hadCache && !silent) quietStatus('⚡ Последние данные: ' + ageText(entry.savedAt));
 
     if (!navigator.onLine) {
       if (hadCache) {
@@ -172,9 +151,7 @@ const FAST_DATA_PATCH = String.raw`
     var subtitle = document.querySelector('.subtitle');
     if (subtitle) {
       Array.from(subtitle.childNodes).forEach(function(node){
-        if (node.nodeType === Node.TEXT_NODE) {
-          node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.5');
-        }
+        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.6');
       });
     }
   });
@@ -184,17 +161,21 @@ const FAST_DATA_PATCH = String.raw`
 async function injectRuntimePatches(response, requestUrl) {
   if (!response) return response;
   const url = new URL(requestUrl);
-  if (url.pathname.endsWith('/resident.html')) return response;
+  const isResident = url.pathname.endsWith('/resident.html');
 
   try {
     let html = await response.text();
 
-    if (!html.includes('__nashdomFastDataV205')) {
-      html = html.replace('</body>', '<script>' + FAST_DATA_PATCH + '<\/script></body>');
+    if (!isResident && !html.includes('__nashdomFastDataV206')) {
+      html = html.replace('</body>', '<script>' + FAST_DATA_PATCH + '<\\/script></body>');
     }
 
-    if (!html.includes('voice-patch.js')) {
-      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.5"></script></body>');
+    if (!isResident && !html.includes('voice-patch.js?v=2.0.6')) {
+      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.6"></script></body>');
+    }
+
+    if (!html.includes('selectel-api-patch.js')) {
+      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.6"></script></body>');
     }
 
     return new Response(html, {
@@ -212,7 +193,17 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (isRemoteDataRequest(url)) return;
+
+  // API всегда идёт напрямую в сеть: ответы CRM нельзя класть в кеш Service Worker.
+  if (url.origin === self.location.origin && (url.pathname === '/api' || url.pathname.startsWith('/api?'))) return;
+
+  // Внешние Firebase/Google-ресурсы не кешируем основным SW.
+  if (
+    url.hostname.includes('script.google.com') ||
+    url.hostname.includes('googleusercontent.com') ||
+    url.hostname.includes('gstatic.com') ||
+    url.hostname.includes('googleapis.com')
+  ) return;
 
   if (request.mode === 'navigate') {
     event.waitUntil(updateNavigationInBackground(request));
@@ -232,9 +223,7 @@ self.addEventListener('fetch', event => {
         event.waitUntil(
           fetch(request)
             .then(response => {
-              if (response && response.ok) {
-                return caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
-              }
+              if (response && response.ok) return caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
             })
             .catch(() => null)
         );
