@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.6';
+const CACHE_NAME = 'nashdom-crm-v2.0.7';
 
 const APP_SHELL = [
   './',
@@ -61,8 +61,8 @@ function updateNavigationInBackground(request) {
 
 const FAST_DATA_PATCH = String.raw`
 (function(){
-  if (window.__nashdomFastDataV206) return;
-  window.__nashdomFastDataV206 = true;
+  if (window.__nashdomFastDataV207) return;
+  window.__nashdomFastDataV207 = true;
 
   function readCacheEntry(){
     try {
@@ -151,7 +151,7 @@ const FAST_DATA_PATCH = String.raw`
     var subtitle = document.querySelector('.subtitle');
     if (subtitle) {
       Array.from(subtitle.childNodes).forEach(function(node){
-        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.6');
+        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.7');
       });
     }
   });
@@ -166,16 +166,16 @@ async function injectRuntimePatches(response, requestUrl) {
   try {
     let html = await response.text();
 
-    if (!isResident && !html.includes('__nashdomFastDataV206')) {
+    if (!isResident && !html.includes('__nashdomFastDataV207')) {
       html = html.replace('</body>', '<script>' + FAST_DATA_PATCH + '<\\/script></body>');
     }
 
-    if (!isResident && !html.includes('voice-patch.js?v=2.0.6')) {
-      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.6"></script></body>');
+    if (!isResident && !html.includes('voice-patch.js?v=2.0.7')) {
+      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.7"></script></body>');
     }
 
-    if (!html.includes('selectel-api-patch.js')) {
-      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.6"></script></body>');
+    if (!html.includes('selectel-api-patch.js?v=2.0.7')) {
+      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.7"></script></body>');
     }
 
     return new Response(html, {
@@ -194,10 +194,8 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(request.url);
 
-  // API всегда идёт напрямую в сеть: ответы CRM нельзя класть в кеш Service Worker.
   if (url.origin === self.location.origin && (url.pathname === '/api' || url.pathname.startsWith('/api?'))) return;
 
-  // Внешние Firebase/Google-ресурсы не кешируем основным SW.
   if (
     url.hostname.includes('script.google.com') ||
     url.hostname.includes('googleusercontent.com') ||
