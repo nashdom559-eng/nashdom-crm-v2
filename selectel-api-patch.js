@@ -1,6 +1,6 @@
 (function(){
-  if (window.__nashdomSelectelApiV207) return;
-  window.__nashdomSelectelApiV207 = true;
+  if (window.__nashdomSelectelApiV208) return;
+  window.__nashdomSelectelApiV208 = true;
 
   const ENDPOINT = location.origin + '/api';
 
@@ -44,9 +44,6 @@
 
   if (typeof window.getAccessKey === 'function' || typeof window.apiCall === 'function') {
     window.apiCall = function(action, payload, onSuccess, onError) {
-      // В текущем интерфейсе отдельной корзины нет: кнопка удаления должна удалять окончательно.
-      if (action === 'moveRequestToTrash') action = 'deleteRequest';
-
       let token = '';
       try { token = typeof getAccessKey === 'function' ? getAccessKey() : ''; } catch (e) {}
       jsonpRequest(action, payload, token, onSuccess, function(message) {
@@ -119,7 +116,7 @@
       const subtitle = document.querySelector('.subtitle');
       if (subtitle) {
         Array.from(subtitle.childNodes).forEach(function(node){
-          if(node.nodeType===Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.7');
+          if(node.nodeType===Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.8');
         });
       }
     });
