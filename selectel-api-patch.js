@@ -1,6 +1,6 @@
 (function(){
-  if (window.__nashdomSelectelApiV206) return;
-  window.__nashdomSelectelApiV206 = true;
+  if (window.__nashdomSelectelApiV207) return;
+  window.__nashdomSelectelApiV207 = true;
 
   const ENDPOINT = location.origin + '/api';
 
@@ -119,7 +119,7 @@
       const subtitle = document.querySelector('.subtitle');
       if (subtitle) {
         Array.from(subtitle.childNodes).forEach(function(node){
-          if(node.nodeType===Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.6');
+          if(node.nodeType===Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.7');
         });
       }
     });
