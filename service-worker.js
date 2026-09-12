@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.10';
+const CACHE_NAME = 'nashdom-crm-v2.0.12';
 
 const APP_SHELL = [
   './',
@@ -174,8 +174,8 @@ async function injectRuntimePatches(response, requestUrl) {
       html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.8"></script></body>');
     }
 
-    if (!html.includes('selectel-api-patch.js?v=2.0.9')) {
-      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.9"></script></body>');
+    if (!html.includes('selectel-api-patch.js?v=2.0.12')) {
+      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.12"></script></body>');
     }
 
     return new Response(html, {
@@ -206,7 +206,8 @@ self.addEventListener('fetch', event => {
   const isResidentResource = url.origin === self.location.origin && (
     url.pathname.endsWith('/resident.html') ||
     url.pathname.endsWith('/resident.js') ||
-    url.pathname.endsWith('/resident.css')
+    url.pathname.endsWith('/resident.css') ||
+    url.pathname.endsWith('/selectel-api-patch.js')
   );
 
   if (isResidentResource) {
