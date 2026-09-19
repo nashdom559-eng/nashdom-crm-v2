@@ -3465,9 +3465,27 @@ function getPhotoUrlsByStage(req, stage) {
     .filter(Boolean);
 }
 
+function buildEmergencyTimelineShareText(req) {
+  const events = req && req.isEmergency && Array.isArray(req.emergencyTimeline)
+    ? req.emergencyTimeline.slice(-12)
+    : [];
+
+  if (!events.length) return '';
+
+  const lines = ['', '🚨 Хронология аварии:'];
+  events.forEach(function(event) {
+    const heading = [event.date || '', event.stage || ''].filter(Boolean).join(' — ');
+    if (heading) lines.push(heading);
+    if (event.comment) lines.push('  ' + event.comment);
+  });
+
+  return lines.join('\n');
+}
+
 function buildRequestShareText(req) {
   const photoBefore = getPhotoUrlsByStage(req, 'before');
   const photoAfter = getPhotoUrlsByStage(req, 'after');
+  const timeline = buildEmergencyTimelineShareText(req);
   const lines = [
     getStatusShareLabel(req),
     req.id ? '№ ' + req.id : '',
@@ -3483,6 +3501,7 @@ function buildRequestShareText(req) {
     '',
     '📝 Заявка:',
     req.description || '—',
+    timeline,
     photoBefore.length ? '\n📷 Фото к заявке:\n' + photoBefore.join('\n') : '',
     photoAfter.length ? '\n📷 Фото после выполнения:\n' + photoAfter.join('\n') : ''
   ];
@@ -3510,6 +3529,7 @@ function buildCompletionReportText(req) {
     '',
     '💬 Результат:',
     req.comment || req.doneComment || req.executionComment || 'Работа выполнена.',
+    buildEmergencyTimelineShareText(req),
     photoBefore.length ? '\n📷 Фото до:\n' + photoBefore.join('\n') : '',
     photoAfter.length ? '\n📷 Фото после:\n' + photoAfter.join('\n') : ''
   ];
@@ -3535,6 +3555,126 @@ async function loadShareFiles(req) {
   return files;
 }
 
+function shareCardText(text) {
+  return String(text || '')
+    .replace(/\n📷 Фото к заявке:\n[\s\S]*?(?=\n📷 Фото после выполнения:|$)/, '')
+    .replace(/\n📷 Фото после выполнения:\n[\s\S]*$/, '')
+    .replace(/\n📷 Фото до:\n[\s\S]*?(?=\n📷 Фото после:|$)/, '')
+    .replace(/\n📷 Фото после:\n[\s\S]*$/, '')
+    .trim();
+}
+
+function wrapShareCardLines(ctx, text, maxWidth) {
+  const result = [];
+  String(text || '').replace(/\r/g, '').split('\n').forEach(function(paragraph) {
+    if (!paragraph) {
+      result.push('');
+      return;
+    }
+
+    const words = paragraph.split(/\s+/);
+    let line = '';
+
+    words.forEach(function(word) {
+      const candidate = line ? line + ' ' + word : word;
+      if (!line || ctx.measureText(candidate).width <= maxWidth) {
+        line = candidate;
+      } else {
+        result.push(line);
+        line = word;
+      }
+    });
+
+    if (line) result.push(line);
+  });
+  return result;
+}
+
+function shareCanvasToFile(canvas, fileName) {
+  return new Promise(function(resolve, reject) {
+    canvas.toBlob(function(blob) {
+      if (!blob) {
+        reject(new Error('Не удалось сформировать карточку заявки'));
+        return;
+      }
+      resolve(new File([blob], fileName, { type: 'image/jpeg' }));
+    }, 'image/jpeg', 0.92);
+  });
+}
+
+async function createShareTextCards(text, requestId) {
+  const cleanText = shareCardText(text);
+  if (!cleanText) return [];
+
+  const width = 1200;
+  const padding = 70;
+  const lineHeight = 58;
+  const maxLinesPerCard = 36;
+  const probe = document.createElement('canvas');
+  const probeCtx = probe.getContext('2d');
+  probeCtx.font = '42px Arial, sans-serif';
+
+  const lines = wrapShareCardLines(probeCtx, cleanText, width - padding * 2);
+  const chunks = [];
+  for (let i = 0; i < lines.length; i += maxLinesPerCard) {
+    chunks.push(lines.slice(i, i + maxLinesPerCard));
+  }
+
+  const files = [];
+  for (let page = 0; page < chunks.length; page++) {
+    const chunk = chunks[page];
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = Math.max(520, padding * 2 + chunk.length * lineHeight + 30);
+
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#111827';
+    ctx.font = '42px Arial, sans-serif';
+    ctx.textBaseline = 'top';
+
+    chunk.forEach(function(line, index) {
+      ctx.fillText(line, padding, padding + index * lineHeight);
+    });
+
+    const suffix = chunks.length > 1 ? '-' + (page + 1) : '';
+    files.push(await shareCanvasToFile(
+      canvas,
+      'zayavka-' + (requestId || 'text') + '-tekst' + suffix + '.jpg'
+    ));
+  }
+
+  return files;
+}
+
+async function buildShareDataWithPhotos(req, title, text) {
+  const photos = await loadShareFiles(req);
+  const shareData = { title: title, text: text };
+
+  if (!photos.length || !navigator.canShare) return shareData;
+
+  // Android/Telegram нередко отбрасывает поле text, когда Web Share содержит
+  // фотографии. Поэтому добавляем текст заявки первым изображением-карточкой.
+  // Сам text всё равно оставляем: мессенджеры, которые его поддерживают,
+  // получат и обычный текст.
+  let cardFiles = [];
+  try {
+    cardFiles = await createShareTextCards(text, req.id || '');
+  } catch (error) {
+    console.warn('Не удалось сформировать текстовую карточку для отправки', error);
+  }
+
+  const combined = cardFiles.concat(photos);
+  if (combined.length && navigator.canShare({ files: combined })) {
+    shareData.files = combined;
+  } else if (navigator.canShare({ files: photos })) {
+    shareData.files = photos;
+  }
+
+  return shareData;
+}
+
 async function shareRequest(rowNumber) {
   const req = findRequestByRow(rowNumber);
   if (!req) {
@@ -3545,11 +3685,11 @@ async function shareRequest(rowNumber) {
   const text = buildRequestShareText(req);
   if (navigator.share) {
     try {
-      const files = await loadShareFiles(req);
-      const shareData = { title: 'Заявка ' + (req.id || ''), text: text };
-      if (files.length && navigator.canShare && navigator.canShare({ files: files })) {
-        shareData.files = files;
-      }
+      const shareData = await buildShareDataWithPhotos(
+        req,
+        'Заявка ' + (req.id || ''),
+        text
+      );
       await navigator.share(shareData);
       return;
     } catch (error) {
@@ -3576,11 +3716,11 @@ async function shareCompletionReport(rowNumber) {
   const text = buildCompletionReportText(req);
   if (navigator.share) {
     try {
-      const files = await loadShareFiles(req);
-      const shareData = { title: 'Отчёт по заявке ' + (req.id || ''), text: text };
-      if (files.length && navigator.canShare && navigator.canShare({ files: files })) {
-        shareData.files = files;
-      }
+      const shareData = await buildShareDataWithPhotos(
+        req,
+        'Отчёт по заявке ' + (req.id || ''),
+        text
+      );
       await navigator.share(shareData);
       return;
     } catch (error) {
