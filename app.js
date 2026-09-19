@@ -2159,8 +2159,10 @@ function attachFormEvents() {
   const house = document.getElementById('house');
   const flat = document.getElementById('flat');
 
-  if (house) house.onchange = handleFlatChange;
-  if (flat) flat.oninput = handleFlatChange;
+  // Не перезаписываем inline onchange="handleHouseChange()": он отвечает
+  // за показ поля «Другой адрес». Добавляем историю/контакты отдельным listener.
+  if (house) house.addEventListener('change', handleFlatChange);
+  if (flat) flat.addEventListener('input', handleFlatChange);
 }
 
 function handleFlatChange() {
