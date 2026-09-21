@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.14';
+const CACHE_NAME = 'nashdom-crm-v2.0.15';
 
 const APP_SHELL = [
   './',
