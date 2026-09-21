@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.19';
+const CACHE_NAME = 'nashdom-crm-v2.0.20';
 
 const APP_SHELL = [
   './',
@@ -20,7 +20,11 @@ const APP_SHELL = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(APP_SHELL))
+      .then(cache => Promise.all(APP_SHELL.map(async url => {
+        const response = await fetch(url, { cache: 'reload' });
+        if (!response || !response.ok) throw new Error('Не удалось обновить ' + url);
+        await cache.put(url, response);
+      })))
       .then(() => self.skipWaiting())
   );
 });
@@ -151,7 +155,7 @@ const FAST_DATA_PATCH = String.raw`
     var subtitle = document.querySelector('.subtitle');
     if (subtitle) {
       Array.from(subtitle.childNodes).forEach(function(node){
-        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.19');
+        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.20');
       });
     }
   });
@@ -170,12 +174,12 @@ async function injectRuntimePatches(response, requestUrl) {
       html = html.replace('</body>', '<script>' + FAST_DATA_PATCH + '<\\/script></body>');
     }
 
-    if (!isResident && !html.includes('voice-patch.js?v=2.0.19')) {
-      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.19"></script></body>');
+    if (!isResident && !html.includes('voice-patch.js?v=2.0.20')) {
+      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.20"></script></body>');
     }
 
-    if (!html.includes('selectel-api-patch.js?v=2.0.19')) {
-      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.19"></script></body>');
+    if (!html.includes('selectel-api-patch.js?v=2.0.20')) {
+      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.20"></script></body>');
     }
 
     return new Response(html, {
@@ -241,12 +245,20 @@ self.addEventListener('fetch', event => {
   }
 
   if (request.mode === 'navigate') {
-    event.waitUntil(updateNavigationInBackground(request));
     event.respondWith((async () => {
-      const cached = await cachedShellForNavigation(request);
-      if (cached) return injectRuntimePatches(cached, request.url);
-      const network = await fetch(request);
-      return injectRuntimePatches(network, request.url);
+      try {
+        const network = await fetch(request, { cache: 'no-store' });
+        if (network && network.ok) {
+          const url = new URL(request.url);
+          const cacheKey = url.pathname.endsWith('/resident.html') ? './resident.html' : './index.html';
+          const copy = network.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(cacheKey, copy)));
+        }
+        return injectRuntimePatches(network, request.url);
+      } catch (e) {
+        const cached = await cachedShellForNavigation(request);
+        return injectRuntimePatches(cached, request.url);
+      }
     })());
     return;
   }
