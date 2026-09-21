@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title>Обновление НашДом CRM</title>
+  <style>
+    body{font-family:Arial,sans-serif;background:#f4f7fb;color:#111827;margin:0;padding:32px}
+    .box{max-width:520px;margin:12vh auto;background:#fff;border-radius:20px;padding:28px;box-shadow:0 12px 40px rgba(15,23,42,.12)}
+    h1{margin:0 0 12px;font-size:25px}.status{font-size:17px;line-height:1.5}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>🏠 Обновляю НашДом CRM</h1>
+    <div id="status" class="status">Удаляю старый кэш…</div>
+  </div>
+  <script>
+    (async function(){
+      const status = document.getElementById('status');
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(function(r){ return r.unregister(); }));
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(function(k){ return caches.delete(k); }));
+        }
+        status.textContent = 'Готово. Открываю свежую версию…';
+      } catch (e) {
+        status.textContent = 'Пробую открыть свежую версию…';
+      }
+      setTimeout(function(){
+        location.replace('./?fresh=2.0.18');
+      }, 700);
+    })();
+  </script>
+</body>
+</html>
