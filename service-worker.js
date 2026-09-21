@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.17';
+const CACHE_NAME = 'nashdom-crm-v2.0.18';
 
 const APP_SHELL = [
   './',
@@ -151,7 +151,7 @@ const FAST_DATA_PATCH = String.raw`
     var subtitle = document.querySelector('.subtitle');
     if (subtitle) {
       Array.from(subtitle.childNodes).forEach(function(node){
-        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.8');
+        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.18');
       });
     }
   });
@@ -170,12 +170,12 @@ async function injectRuntimePatches(response, requestUrl) {
       html = html.replace('</body>', '<script>' + FAST_DATA_PATCH + '<\\/script></body>');
     }
 
-    if (!isResident && !html.includes('voice-patch.js?v=2.0.8')) {
-      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.8"></script></body>');
+    if (!isResident && !html.includes('voice-patch.js?v=2.0.18')) {
+      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.18"></script></body>');
     }
 
-    if (!html.includes('selectel-api-patch.js?v=2.0.12')) {
-      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.12"></script></body>');
+    if (!html.includes('selectel-api-patch.js?v=2.0.18')) {
+      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.18"></script></body>');
     }
 
     return new Response(html, {
@@ -203,11 +203,32 @@ self.addEventListener('fetch', event => {
     url.hostname.includes('googleapis.com')
   ) return;
 
+  const isCoreFrontendAsset = url.origin === self.location.origin && (
+    url.pathname.endsWith('/app.js') ||
+    url.pathname.endsWith('/style.css') ||
+    url.pathname.endsWith('/voice-patch.js') ||
+    url.pathname.endsWith('/selectel-api-patch.js') ||
+    url.pathname.endsWith('/firebase-push.js')
+  );
+
+  if (isCoreFrontendAsset) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
+        .then(response => {
+          if (!response || !response.ok) return Promise.reject(new Error('Frontend asset unavailable'));
+          const clone = response.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, clone)));
+          return response;
+        })
+        .catch(() => caches.match(request, { ignoreSearch: true }))
+    );
+    return;
+  }
+
   const isResidentResource = url.origin === self.location.origin && (
     url.pathname.endsWith('/resident.html') ||
     url.pathname.endsWith('/resident.js') ||
-    url.pathname.endsWith('/resident.css') ||
-    url.pathname.endsWith('/selectel-api-patch.js')
+    url.pathname.endsWith('/resident.css')
   );
 
   if (isResidentResource) {
