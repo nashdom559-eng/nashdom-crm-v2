@@ -3358,20 +3358,14 @@ async function makeLabeledHouseReportPhoto(blob, item) {
   const sourceWidth = Number(image.naturalWidth || image.width || width);
   const sourceHeight = Number(image.naturalHeight || image.height || 960);
   const scale = width / sourceWidth;
-  const photoHeight = Math.max(1, Math.round(sourceHeight * scale));
-  const headerHeight = Math.max(170, Math.round(width * 0.15));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
   const canvas = document.createElement('canvas');
   canvas.width = width;
-  canvas.height = headerHeight + photoHeight;
+  canvas.height = height;
 
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, width, headerHeight);
-  ctx.fillStyle = '#111827';
-  ctx.textBaseline = 'top';
+  ctx.drawImage(image, 0, 0, width, height);
 
-  const padding = Math.max(28, Math.round(width * 0.035));
-  const maxTextWidth = width - padding * 2;
   const requestId = item.req.id || ('№ ' + (item.req.rowNumber || ''));
   const stage = reportPhotoStageLabel(item.kind);
   const flatLabel = isCommonPropertyRequest(item.req) ? 'место ' : 'кв. ';
@@ -3379,12 +3373,68 @@ async function makeLabeledHouseReportPhoto(blob, item) {
   const date = requestShortHouseDate(item.req);
   const description = String(item.req.description || '').replace(/\s+/g, ' ').trim();
 
-  let y = Math.max(18, Math.round(width * 0.018));
-  y = drawReportPhotoText(ctx, (requestId ? '№ ' + String(requestId).replace(/^№\s*/, '') : 'Заявка') + ' · ' + stage, padding, y, maxTextWidth, Math.max(36, Math.round(width * 0.036)), '800');
-  y = drawReportPhotoText(ctx, [where, date].filter(Boolean).join(' · '), padding, y, maxTextWidth, Math.max(28, Math.round(width * 0.026)), '700');
-  drawReportPhotoText(ctx, description, padding, y, maxTextWidth, Math.max(25, Math.round(width * 0.023)), '500');
+  // Подпись рисуем ВНУТРИ самой фотографии, а не над ней.
+  // Telegram обрезает превью альбома, поэтому внешняя плашка могла исчезать.
+  const padding = Math.max(24, Math.round(width * 0.032));
+  const bannerY = Math.max(20, Math.round(height * 0.24));
+  const bannerH = Math.min(
+    Math.round(height * 0.24),
+    Math.max(170, Math.round(width * 0.18))
+  );
 
-  ctx.drawImage(image, 0, headerHeight, width, photoHeight);
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+  ctx.fillRect(0, bannerY, width, bannerH);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'top';
+  const maxTextWidth = width - padding * 2;
+  let y = bannerY + Math.max(16, Math.round(bannerH * 0.10));
+
+  y = drawReportPhotoText(
+    ctx,
+    (requestId ? '№ ' + String(requestId).replace(/^№\s*/, '') : 'Заявка') + ' · ' + stage,
+    padding,
+    y,
+    maxTextWidth,
+    Math.max(34, Math.round(width * 0.034)),
+    '800'
+  );
+
+  y = drawReportPhotoText(
+    ctx,
+    [where, date].filter(Boolean).join(' · '),
+    padding,
+    y,
+    maxTextWidth,
+    Math.max(25, Math.round(width * 0.024)),
+    '700'
+  );
+
+  drawReportPhotoText(
+    ctx,
+    description,
+    padding,
+    y,
+    maxTextWidth,
+    Math.max(22, Math.round(width * 0.021)),
+    '500'
+  );
+
+  // Дублируем короткий номер внизу: он останется виден даже при иной обрезке превью.
+  const badge = (requestId ? '№ ' + String(requestId).replace(/^№\s*/, '') : 'Заявка') + ' · ' + stage;
+  const badgeFont = Math.max(22, Math.round(width * 0.021));
+  ctx.font = '800 ' + badgeFont + 'px Arial, sans-serif';
+  const badgePadX = Math.max(14, Math.round(width * 0.018));
+  const badgePadY = Math.max(10, Math.round(width * 0.012));
+  const badgeW = Math.min(width - padding * 2, ctx.measureText(badge).width + badgePadX * 2);
+  const badgeH = badgeFont + badgePadY * 2;
+  const badgeX = padding;
+  const badgeY = height - badgeH - padding;
+
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+  ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(badge, badgeX + badgePadX, badgeY + badgePadY);
 
   return new Promise(function(resolve, reject) {
     canvas.toBlob(function(output) {
