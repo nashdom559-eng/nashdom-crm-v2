@@ -2987,6 +2987,58 @@ function dateInputValue(date) {
   ].join('-');
 }
 
+function houseReportTimelineEvents(req) {
+  if (!req || !req.isEmergency || !Array.isArray(req.emergencyTimeline)) return [];
+  return req.emergencyTimeline.filter(function(item) {
+    return item && (item.stage || item.comment || item.date);
+  });
+}
+
+function renderHouseReportTimeline(req) {
+  const events = houseReportTimelineEvents(req);
+  if (!events.length) return '';
+
+  return `
+    <div class="house-report-timeline">
+      <div class="house-report-subtitle">🚨 Хронология аварии</div>
+      ${events.map(function(item) {
+        return `
+          <div class="house-report-timeline-item">
+            <div class="house-report-timeline-head">
+              <strong>${escapeHtml(item.stage || 'Этап')}</strong>
+              ${item.date ? `<span>${escapeHtml(item.date)}</span>` : ''}
+            </div>
+            ${item.comment ? `<div class="house-report-timeline-comment">${escapeHtml(item.comment)}</div>` : ''}
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function renderHouseReportPhotoGroup(items, title) {
+  if (!Array.isArray(items) || !items.length) return '';
+  const encoded = encodeURIComponent(JSON.stringify(items));
+  return `
+    <div class="house-report-photo-group">
+      <div class="house-report-subtitle">${escapeHtml(title)} · ${items.length}</div>
+      <div class="house-report-photo-grid">
+        ${items.map(function(photo, index) {
+          const src = photo && (photo.thumb || getFullPhotoUrl(photo) || photo.url) || '';
+          return `<button type="button" class="house-report-photo"
+            onclick="openPhotoLightboxGallery('${encoded}',${index})">
+            <img src="${escapeHtml(src)}" alt="Фото заявки">
+          </button>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function renderHouseReportPhotos(req) {
+  return [
+    renderHouseReportPhotoGroup(req.photosBefore || [], '📷 Фото до / к заявке'),
+    renderHouseReportPhotoGroup(req.photosAfter || [], '📷 Фото после')
+  ].filter(Boolean).join('');
+}
+
 function renderHouseRequestItem(req) {
   const comment = req.comment || req.doneComment || req.executionComment || '';
 
@@ -3001,6 +3053,8 @@ function renderHouseRequestItem(req) {
         <span class="house-status">${escapeHtml(req.status || 'Принято')}</span>
         ${comment ? `<span>${escapeHtml(comment)}</span>` : ''}
       </div>
+      ${renderHouseReportTimeline(req)}
+      ${renderHouseReportPhotos(req)}
     </div>`;
 }
 
@@ -3162,7 +3216,21 @@ function reportPeriodText() {
   return 'по ' + fullReportDate(to);
 }
 
-function houseReportText() {
+function houseReportPhotoObjects(requests) {
+  const result = [];
+  (requests || []).forEach(function(req) {
+    (req.photosBefore || []).forEach(function(photo, index) {
+      if (photo) result.push({ req: req, photo: photo, kind: 'before', index: index });
+    });
+    (req.photosAfter || []).forEach(function(photo, index) {
+      if (photo) result.push({ req: req, photo: photo, kind: 'after', index: index });
+    });
+  });
+  return result;
+}
+
+function houseReportText(options) {
+  const opts = options || {};
   const house = getValue('houseCardSelect');
   const requests = filteredHouseRequests();
 
@@ -3186,36 +3254,153 @@ function houseReportText() {
 
   requests.forEach((req, index) => {
     const comment = req.comment || req.doneComment || req.executionComment || '';
-    lines.push(`${index + 1}. ${requestShortHouseDate(req)} · кв. ${req.flat || '—'} · ${req.status || 'Принято'}`);
+    const before = req.photosBefore || [];
+    const after = req.photosAfter || [];
+    const timeline = houseReportTimelineEvents(req);
+
+    lines.push(`${index + 1}. ${requestShortHouseDate(req)} · ${isCommonPropertyRequest(req) ? 'место ' : 'кв. '}${req.flat || '—'} · ${req.status || 'Принято'}`);
     lines.push(String(req.description || ''));
+
+    if (timeline.length) {
+      lines.push('🚨 Хронология аварии:');
+      timeline.forEach(function(item) {
+        const head = [item.date || '', item.stage || ''].filter(Boolean).join(' — ');
+        if (head) lines.push('• ' + head);
+        if (item.comment) lines.push('  ' + item.comment);
+      });
+    }
+
     if (comment) lines.push('Результат/комментарий: ' + comment);
+
+    if (before.length || after.length) {
+      lines.push('📷 Фото: ' +
+        (before.length ? 'до/к заявке ' + before.length : '') +
+        (before.length && after.length ? ', ' : '') +
+        (after.length ? 'после ' + after.length : ''));
+    }
+
+    if (opts.includePhotoLinks) {
+      before.forEach(function(photo) {
+        const url = getFullPhotoUrl(photo);
+        if (url) lines.push('Фото до: ' + url);
+      });
+      after.forEach(function(photo) {
+        const url = getFullPhotoUrl(photo);
+        if (url) lines.push('Фото после: ' + url);
+      });
+    }
+
     lines.push('');
   });
 
   return lines.join('\n').trim();
 }
 
+async function loadHouseReportShareFiles(requests, maxFiles) {
+  const all = houseReportPhotoObjects(requests);
+  const limit = Math.max(1, Number(maxFiles || 30));
+  const selected = all.slice(0, limit);
+  const files = [];
+
+  for (let i = 0; i < selected.length; i++) {
+    const item = selected[i];
+    const url = getFullPhotoUrl(item.photo);
+    if (!url) continue;
+
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) continue;
+      const blob = await response.blob();
+      const stage = item.kind === 'after' ? 'posle' : 'do';
+      const requestPart = String(item.req.id || item.req.rowNumber || 'request').replace(/[^a-zA-Zа-яА-Я0-9_-]+/g, '_');
+      files.push(new File(
+        [blob],
+        'otchet-' + requestPart + '-' + stage + '-' + (item.index + 1) + '.jpg',
+        { type: blob.type || 'image/jpeg' }
+      ));
+    } catch (error) {
+      console.warn('Не удалось подготовить фото для отчёта', error);
+    }
+  }
+
+  return { files: files, total: all.length, limited: all.length > selected.length };
+}
+
 async function shareHouseReport() {
   const house = getValue('houseCardSelect');
   if (!house) return alert('Сначала выбери дом.');
 
+  const requests = filteredHouseRequests();
   const text = houseReportText();
 
   if (navigator.share) {
     try {
-      await navigator.share({ title: 'Отчёт по заявкам: ' + house, text });
+      const photoResult = await loadHouseReportShareFiles(requests, 30);
+      const shareData = { title: 'Отчёт по заявкам: ' + house, text: text };
+
+      if (photoResult.files.length && navigator.canShare) {
+        let cards = [];
+        try {
+          cards = await createShareTextCards(text, 'otchet-' + house);
+        } catch (error) {
+          console.warn('Не удалось сформировать карточку отчёта', error);
+        }
+
+        const combined = cards.concat(photoResult.files);
+        if (combined.length && navigator.canShare({ files: combined })) {
+          shareData.files = combined;
+        } else if (navigator.canShare({ files: photoResult.files })) {
+          shareData.files = photoResult.files;
+        }
+      }
+
+      if (photoResult.limited) {
+        alert('В отчёте больше 30 фотографий. В отправку вложены первые 30; полный набор остаётся доступен в CRM и в PDF.');
+      }
+
+      await navigator.share(shareData);
       return;
     } catch (error) {
       if (error && error.name === 'AbortError') return;
+      console.warn('Не удалось отправить отчёт через системное меню', error);
     }
   }
 
+  const fallbackText = houseReportText({ includePhotoLinks: true });
   try {
-    await navigator.clipboard.writeText(text);
-    alert('Отчёт скопирован. Его можно вставить в сообщение.');
+    await navigator.clipboard.writeText(fallbackText);
+    alert('Отчёт и ссылки на фотографии скопированы. Его можно вставить в сообщение.');
   } catch (error) {
-    prompt('Скопируй отчёт:', text);
+    prompt('Скопируй отчёт:', fallbackText);
   }
+}
+
+function printReportTimelineHtml(req) {
+  const events = houseReportTimelineEvents(req);
+  if (!events.length) return '';
+
+  return '<div class="timeline"><strong>Хронология аварии:</strong>' +
+    events.map(function(item) {
+      const head = [item.date || '', item.stage || ''].filter(Boolean).join(' — ');
+      return '<div class="timeline-item"><b>' + escapeHtml(head) + '</b>' +
+        (item.comment ? '<br>' + escapeHtml(item.comment) : '') + '</div>';
+    }).join('') + '</div>';
+}
+
+function printReportPhotosHtml(req) {
+  const groups = [
+    { title: 'До / к заявке', items: req.photosBefore || [] },
+    { title: 'После', items: req.photosAfter || [] }
+  ];
+
+  return groups.map(function(group) {
+    if (!group.items.length) return '';
+    return '<div class="print-photo-group"><strong>' + escapeHtml(group.title) + ':</strong><div class="print-photos">' +
+      group.items.map(function(photo) {
+        const url = getFullPhotoUrl(photo);
+        return url ? '<img src="' + escapeHtml(url) + '" alt="Фото">' : '';
+      }).join('') + '</div></div>';
+  }).join('');
 }
 
 function printHouseReport() {
@@ -3229,9 +3414,15 @@ function printHouseReport() {
       <td>${escapeHtml(requestShortHouseDate(req))}</td>
       <td>${escapeHtml(req.id || '')}</td>
       <td>${escapeHtml(req.flat || '—')}</td>
-      <td>${escapeHtml(req.description || '')}</td>
+      <td>
+        <div>${escapeHtml(req.description || '')}</div>
+        ${printReportTimelineHtml(req)}
+      </td>
       <td>${escapeHtml(req.status || 'Принято')}</td>
-      <td>${escapeHtml(comment)}</td>
+      <td>
+        ${comment ? '<div>' + escapeHtml(comment) + '</div>' : ''}
+        ${printReportPhotosHtml(req)}
+      </td>
     </tr>`;
   }).join('');
 
@@ -3245,17 +3436,22 @@ function printHouseReport() {
     body{font-family:Arial,sans-serif;margin:24px;color:#111}
     h1{font-size:20px;margin:0 0 6px}
     .period{margin-bottom:18px}
-    table{width:100%;border-collapse:collapse;font-size:11px}
+    table{width:100%;border-collapse:collapse;font-size:10px}
     th,td{border:1px solid #777;padding:6px;text-align:left;vertical-align:top}
     th{background:#eee}
+    .timeline{margin-top:8px;padding-top:6px;border-top:1px solid #ddd}
+    .timeline-item{margin-top:5px;line-height:1.35}
+    .print-photo-group{margin-top:8px}
+    .print-photos{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+    .print-photos img{width:92px;height:70px;object-fit:cover;border:1px solid #aaa;border-radius:4px}
     .footer{margin-top:24px;font-size:11px;color:#555}
-    @page{size:A4 landscape;margin:12mm}
+    @page{size:A4 landscape;margin:10mm}
   </style></head><body>
   <h1>Отчёт по заявкам: ${escapeHtml(house)}</h1>
   <div class="period">Период: ${escapeHtml(reportPeriodText())}</div>
   <table><thead><tr>
-    <th>Дата</th><th>№ заявки</th><th>Квартира</th>
-    <th>Содержание заявки</th><th>Статус</th><th>Результат / комментарий</th>
+    <th>Дата</th><th>№ заявки</th><th>Квартира / место</th>
+    <th>Заявка / хронология</th><th>Статус</th><th>Результат / фотографии</th>
   </tr></thead><tbody>
     ${rows || '<tr><td colspan="6">Заявок нет</td></tr>'}
   </tbody></table>
@@ -3264,9 +3460,39 @@ function printHouseReport() {
 
   win.document.close();
   win.focus();
-  setTimeout(() => win.print(), 300);
-}
 
+  const printWhenReady = function() {
+    const images = Array.from(win.document.images || []);
+    const pending = images.filter(function(img) { return !img.complete; });
+    if (!pending.length) {
+      setTimeout(function() { win.print(); }, 150);
+      return;
+    }
+
+    let left = pending.length;
+    let printed = false;
+    const finish = function() {
+      if (printed) return;
+      left -= 1;
+      if (left <= 0) {
+        printed = true;
+        setTimeout(function() { win.print(); }, 150);
+      }
+    };
+    pending.forEach(function(img) {
+      img.addEventListener('load', finish, { once: true });
+      img.addEventListener('error', finish, { once: true });
+    });
+    setTimeout(function() {
+      if (!printed) {
+        printed = true;
+        win.print();
+      }
+    }, 3500);
+  };
+
+  setTimeout(printWhenReady, 100);
+}
 
 /* ===== v0.15: входящие заявки жителей ===== */
 
