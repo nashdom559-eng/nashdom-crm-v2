@@ -3296,6 +3296,107 @@ function houseReportText(options) {
   return lines.join('\n').trim();
 }
 
+function reportPhotoStageLabel(kind) {
+  return kind === 'after' ? 'ПОСЛЕ' : 'ДО / К ЗАЯВКЕ';
+}
+
+function reportPhotoSafePart(value, fallback) {
+  const clean = String(value || fallback || '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Zа-яА-Я0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return clean || String(fallback || 'photo');
+}
+
+function blobToShareImage(blob) {
+  return new Promise(function(resolve, reject) {
+    const objectUrl = URL.createObjectURL(blob);
+    const image = new Image();
+
+    image.onload = function() {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+
+    image.onerror = function() {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Не удалось прочитать фотографию'));
+    };
+
+    image.src = objectUrl;
+  });
+}
+
+function drawReportPhotoText(ctx, text, x, y, maxWidth, fontSize, weight) {
+  const clean = String(text || '').trim();
+  if (!clean) return y;
+
+  let size = fontSize;
+  ctx.font = (weight || '600') + ' ' + size + 'px Arial, sans-serif';
+
+  while (ctx.measureText(clean).width > maxWidth && size > 24) {
+    size -= 2;
+    ctx.font = (weight || '600') + ' ' + size + 'px Arial, sans-serif';
+  }
+
+  let output = clean;
+  if (ctx.measureText(output).width > maxWidth) {
+    while (output.length > 8 && ctx.measureText(output + '…').width > maxWidth) {
+      output = output.slice(0, -1);
+    }
+    output += '…';
+  }
+
+  ctx.fillText(output, x, y);
+  return y + Math.round(size * 1.35);
+}
+
+async function makeLabeledHouseReportPhoto(blob, item) {
+  const image = await blobToShareImage(blob);
+  const width = Math.max(640, Number(image.naturalWidth || image.width || 1280));
+  const sourceWidth = Number(image.naturalWidth || image.width || width);
+  const sourceHeight = Number(image.naturalHeight || image.height || 960);
+  const scale = width / sourceWidth;
+  const photoHeight = Math.max(1, Math.round(sourceHeight * scale));
+  const headerHeight = Math.max(170, Math.round(width * 0.15));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = headerHeight + photoHeight;
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, headerHeight);
+  ctx.fillStyle = '#111827';
+  ctx.textBaseline = 'top';
+
+  const padding = Math.max(28, Math.round(width * 0.035));
+  const maxTextWidth = width - padding * 2;
+  const requestId = item.req.id || ('№ ' + (item.req.rowNumber || ''));
+  const stage = reportPhotoStageLabel(item.kind);
+  const flatLabel = isCommonPropertyRequest(item.req) ? 'место ' : 'кв. ';
+  const where = [item.req.house || '', item.req.flat ? flatLabel + item.req.flat : ''].filter(Boolean).join(' · ');
+  const date = requestShortHouseDate(item.req);
+  const description = String(item.req.description || '').replace(/\s+/g, ' ').trim();
+
+  let y = Math.max(18, Math.round(width * 0.018));
+  y = drawReportPhotoText(ctx, (requestId ? '№ ' + String(requestId).replace(/^№\s*/, '') : 'Заявка') + ' · ' + stage, padding, y, maxTextWidth, Math.max(36, Math.round(width * 0.036)), '800');
+  y = drawReportPhotoText(ctx, [where, date].filter(Boolean).join(' · '), padding, y, maxTextWidth, Math.max(28, Math.round(width * 0.026)), '700');
+  drawReportPhotoText(ctx, description, padding, y, maxTextWidth, Math.max(25, Math.round(width * 0.023)), '500');
+
+  ctx.drawImage(image, 0, headerHeight, width, photoHeight);
+
+  return new Promise(function(resolve, reject) {
+    canvas.toBlob(function(output) {
+      if (!output) {
+        reject(new Error('Не удалось подписать фотографию'));
+        return;
+      }
+      resolve(output);
+    }, 'image/jpeg', 0.92);
+  });
+}
+
 async function loadHouseReportShareFiles(requests, maxFiles) {
   const all = houseReportPhotoObjects(requests);
   const limit = Math.max(1, Number(maxFiles || 30));
@@ -3310,12 +3411,21 @@ async function loadHouseReportShareFiles(requests, maxFiles) {
     try {
       const response = await fetch(url, { mode: 'cors' });
       if (!response.ok) continue;
-      const blob = await response.blob();
+      const originalBlob = await response.blob();
+      let blob = originalBlob;
+
+      try {
+        blob = await makeLabeledHouseReportPhoto(originalBlob, item);
+      } catch (labelError) {
+        console.warn('Не удалось добавить подпись на фото отчёта', labelError);
+      }
+
       const stage = item.kind === 'after' ? 'posle' : 'do';
-      const requestPart = String(item.req.id || item.req.rowNumber || 'request').replace(/[^a-zA-Zа-яА-Я0-9_-]+/g, '_');
+      const requestPart = reportPhotoSafePart(item.req.id || item.req.rowNumber, 'request');
+      const flatPart = reportPhotoSafePart(item.req.flat, 'mesto');
       files.push(new File(
         [blob],
-        'otchet-' + requestPart + '-' + stage + '-' + (item.index + 1) + '.jpg',
+        requestPart + '-' + flatPart + '-' + stage + '-' + (item.index + 1) + '.jpg',
         { type: blob.type || 'image/jpeg' }
       ));
     } catch (error) {
@@ -3396,9 +3506,15 @@ function printReportPhotosHtml(req) {
   return groups.map(function(group) {
     if (!group.items.length) return '';
     return '<div class="print-photo-group"><strong>' + escapeHtml(group.title) + ':</strong><div class="print-photos">' +
-      group.items.map(function(photo) {
+      group.items.map(function(photo, index) {
         const url = getFullPhotoUrl(photo);
-        return url ? '<img src="' + escapeHtml(url) + '" alt="Фото">' : '';
+        if (!url) return '';
+        const caption = [
+          req.id ? '№ ' + req.id : '',
+          req.flat ? (isCommonPropertyRequest(req) ? 'место ' : 'кв. ') + req.flat : '',
+          group.title + ' ' + (index + 1)
+        ].filter(Boolean).join(' · ');
+        return '<figure><img src="' + escapeHtml(url) + '" alt="Фото"><figcaption>' + escapeHtml(caption) + '</figcaption></figure>';
       }).join('') + '</div></div>';
   }).join('');
 }
@@ -3442,8 +3558,10 @@ function printHouseReport() {
     .timeline{margin-top:8px;padding-top:6px;border-top:1px solid #ddd}
     .timeline-item{margin-top:5px;line-height:1.35}
     .print-photo-group{margin-top:8px}
-    .print-photos{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
-    .print-photos img{width:92px;height:70px;object-fit:cover;border:1px solid #aaa;border-radius:4px}
+    .print-photos{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+    .print-photos figure{width:102px;margin:0}
+    .print-photos img{width:102px;height:76px;object-fit:cover;border:1px solid #aaa;border-radius:4px;display:block}
+    .print-photos figcaption{margin-top:2px;font-size:7px;line-height:1.15;color:#444}
     .footer{margin-top:24px;font-size:11px;color:#555}
     @page{size:A4 landscape;margin:10mm}
   </style></head><body>
