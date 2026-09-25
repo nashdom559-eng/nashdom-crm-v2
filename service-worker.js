@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nashdom-crm-v2.0.20';
+const CACHE_NAME = 'nashdom-crm-v2.0.21';
 
 const APP_SHELL = [
   './',
@@ -155,7 +155,7 @@ const FAST_DATA_PATCH = String.raw`
     var subtitle = document.querySelector('.subtitle');
     if (subtitle) {
       Array.from(subtitle.childNodes).forEach(function(node){
-        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.20');
+        if (node.nodeType === Node.TEXT_NODE) node.nodeValue = node.nodeValue.replace(/v2\.0\.[0-9]+/,'v2.0.21');
       });
     }
   });
@@ -174,12 +174,12 @@ async function injectRuntimePatches(response, requestUrl) {
       html = html.replace('</body>', '<script>' + FAST_DATA_PATCH + '<\\/script></body>');
     }
 
-    if (!isResident && !html.includes('voice-patch.js?v=2.0.20')) {
-      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.20"></script></body>');
+    if (!isResident && !html.includes('voice-patch.js?v=2.0.21')) {
+      html = html.replace('</body>', '<script src="./voice-patch.js?v=2.0.21"></script></body>');
     }
 
-    if (!html.includes('selectel-api-patch.js?v=2.0.20')) {
-      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.20"></script></body>');
+    if (!html.includes('selectel-api-patch.js?v=2.0.21')) {
+      html = html.replace('</body>', '<script src="./selectel-api-patch.js?v=2.0.21"></script></body>');
     }
 
     return new Response(html, {
