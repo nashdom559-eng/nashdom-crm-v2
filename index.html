@@ -10,8 +10,8 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <title>НашДом CRM</title>
 
-  <link rel="manifest" href="./manifest.json?v=2.0.20">
-  <link rel="stylesheet" href="./style.css?v=2.0.20">
+  <link rel="manifest" href="./manifest.json?v=2.0.21">
+  <link rel="stylesheet" href="./style.css?v=2.0.21">
 </head>
 
 <body>
@@ -24,7 +24,7 @@
     <header class="header">
       <div>
         <div class="logo">🏠 НашДом CRM</div>
-        <div class="subtitle">НашДом CRM v2.0.20<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
+        <div class="subtitle">НашДом CRM v2.0.21<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
         <button class="key-btn" onclick="resetAccessKey()">Сменить ключ</button>
       </div>
     </header>
@@ -97,7 +97,7 @@
           <input id="commonLocationDetails" type="text" placeholder="Уточнение: подъезд №2, насос №1 и т. п.">
           <input id="customLocation" type="text" placeholder="Укажите место" hidden>
           <label>Источник</label>
-          <select id="recordSource"><option value="Обнаружено при обходе">Обнаружено при обходе</option><option value="Председатель">Председатель</option><option value="Житель">Житель</option><option value="Подрядчик">Подрядчик</option><option value="Проверка / инспекция">Проверка / инспекция</option><option value="Диспетчер">Диспетчер</option></select>
+          <select id="recordSource"><option value="Обнаружено при обходе">Обнаружено при обходе</option><option value="Председатель">Председатель</option><option value="Житель">Житель</option><option value="Подрядчик">Подрядчик</option><option value="Проверка / инспекция">Проверка / инспекция</option><option value="Диспетчер">Диспетчер</option><option value="Охрана">Охрана</option></select>
         </div>
         <label id="descriptionLabel">3. Заявка</label>
         <div class="voice-field"><textarea id="description" enterkeyhint="next" placeholder="Например: течёт стояк"></textarea><button id="voiceBtn" type="button" class="voice-btn" onclick="toggleVoiceInput()">🎙 Говорить</button></div>
@@ -484,7 +484,7 @@
     <button type="button" id="photoLightboxNext" class="photo-lightbox-nav photo-lightbox-next" onclick="showNextPhoto(event)" aria-label="Следующее фото">›</button>
   </div>
 
-  <script src="./app.js?v=2.0.20"></script>
+  <script src="./app.js?v=2.0.21"></script>
   <script>
     // Firebase загружаем только после показа интерфейса: его внешние модули
     // больше не задерживают DOMContentLoaded и холодный запуск CRM.
@@ -494,7 +494,7 @@
         const script = document.createElement('script');
         script.id = 'firebasePushModule';
         script.type = 'module';
-        script.src = './firebase-push.js?v=2.0.20';
+        script.src = './firebase-push.js?v=2.0.21';
         document.body.appendChild(script);
       };
       if ('requestIdleCallback' in window) {
@@ -532,7 +532,7 @@
       });
 
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('./service-worker.js?v=2.0.20', { scope: './', updateViaCache: 'none' })
+        navigator.serviceWorker.register('./service-worker.js?v=2.0.21', { scope: './', updateViaCache: 'none' })
           .then(function(registration) {
             if (registration.waiting) showUpdateBanner(registration.waiting);
 
