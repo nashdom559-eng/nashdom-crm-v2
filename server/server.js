@@ -147,6 +147,14 @@ async function action(name,p){
   if(p.planDate){ try{eventId=await createOrUpdateCalendarEvent(eventId,r.id,r.status,{house:r.house,flat:r.flat,name:r.name,phone:r.phone,description:r.description,comment:r.comment},p.planDate);}catch(e){console.error('Calendar plan error:',e.message||e);} } else {await safeDeleteCalendarEvent(eventId); eventId='';}
   await pool.query('UPDATE requests SET plan_date=$1,calendar_event_id=$2 WHERE id=$3',[p.planDate||null,eventId,r.id]); return {ok:true,message:p.planDate?'Плановый визит назначен':'Плановый визит очищен'};
  }
+ if(name==='addWorkLog'){
+  const r=await findRequest(p);
+  if(!r)throw new Error('Заявка не найдена');
+  const comment=String(p.comment||'').trim();
+  if(!comment)throw new Error('Напиши, что сделано или обнаружено');
+  await addTimeline(pool,r.id,'WORK_LOG',comment,String(p.operationId||''),String(p.executor||''));
+  return {ok:true,message:'Запись хода работ добавлена'};
+ }
  if(name==='updateRequest'){
   let eventId=String(r.calendar_event_id||'');
   if(p.planDate){ try{eventId=await createOrUpdateCalendarEvent(eventId,r.id,r.status,{house:p.house||'',flat:p.flat||'',name:p.name||'',phone:p.phone||'',description:p.description||'',comment:r.comment},p.planDate);}catch(e){console.error('Calendar update error:',e.message||e);} } else {await safeDeleteCalendarEvent(eventId); eventId='';}
