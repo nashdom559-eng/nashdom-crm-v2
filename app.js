@@ -56,6 +56,7 @@ const CRM = {
     currentReopenRowNumber: null,
     currentDeleteRowNumber: null,
     currentDispatchRowNumber: null,
+    currentWorkLogRowNumber: null,
     journalFilter: 'all'
   }
 };
@@ -1307,6 +1308,80 @@ function renderAcceptedRequests() {
     .join('');
 }
 
+function renderWorkLog(req) {
+  if (!req || req.isEmergency || !Array.isArray(req.emergencyTimeline)) return '';
+  const events = req.emergencyTimeline.filter(function(item) {
+    return item && item.stage === 'WORK_LOG';
+  });
+  if (!events.length) return '';
+  return `
+    <div class="work-log">
+      <div class="work-log-title">🛠 Ход работ</div>
+      ${events.map(function(item) {
+        return `
+          <div class="work-log-item">
+            <div class="work-log-head">
+              <strong>${escapeHtml(item.date || '')}</strong>
+            </div>
+            <div class="work-log-comment">${escapeHtml(item.comment || '')}</div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function openWorkLogModal(rowNumber) {
+  CRM.state.currentWorkLogRowNumber = rowNumber;
+  setValue('workLogComment', '');
+  const box = document.getElementById('workLogActionStatus');
+  if (box) box.textContent = '';
+  const btn = document.getElementById('workLogConfirmBtn');
+  if (btn) endActionFeedback(btn);
+  const modal = document.getElementById('workLogModal');
+  if (modal) modal.classList.add('active');
+}
+
+function closeWorkLogModal() {
+  CRM.state.currentWorkLogRowNumber = null;
+  setValue('workLogComment', '');
+  const modal = document.getElementById('workLogModal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function confirmWorkLog() {
+  const rowNumber = CRM.state.currentWorkLogRowNumber;
+  if (!rowNumber) return;
+  const button = document.getElementById('workLogConfirmBtn');
+  const cancelButton = document.getElementById('workLogCancelBtn');
+  const statusBox = document.getElementById('workLogActionStatus');
+  const comment = getValue('workLogComment').trim();
+  if (!comment) {
+    if (statusBox) statusBox.textContent = 'Напиши, что сделано или обнаружено.';
+    return;
+  }
+  if (!beginActionFeedback(button, 'Сохраняю…', 'Сохранение продолжается. Повторно нажимать не нужно.')) return;
+  if (cancelButton) cancelButton.disabled = true;
+  try {
+    const result = await apiCallPromise('addWorkLog', {
+      rowNumber: rowNumber,
+      comment: comment,
+      operationId: 'work_' + Date.now() + '_' + Math.floor(Math.random() * 1000000)
+    });
+    await apiCallPromise('getAppData', null).then(function(data) {
+      applyAppData(data);
+      saveCachedAppData(CRM.data);
+    });
+    if (statusBox) statusBox.textContent = '✓ ' + (result.message || 'Запись добавлена');
+    endActionFeedback(button, '✓ Сохранено', 1200);
+    if (cancelButton) cancelButton.disabled = false;
+    window.setTimeout(closeWorkLogModal, 600);
+  } catch (error) {
+    endActionFeedback(button);
+    if (cancelButton) cancelButton.disabled = false;
+    if (statusBox) statusBox.textContent = 'Ошибка: ' + error.message;
+    showStatus('Ошибка: ' + error.message, true);
+  }
+}
+
 function renderRequestCard(req, showActions) {
   const statusClass = getRequestCardClass(req);
 
@@ -1383,6 +1458,8 @@ function renderRequestCard(req, showActions) {
     renderPhotoGallery(req.photosBefore, '📷 До', req.rowNumber, 'before') +
     renderPhotoGallery(req.photosAfter, '📷 После', req.rowNumber, 'after');
 
+  const workLog = renderWorkLog(req);
+
   const actions =
     showActions && req.status !== 'Выполнено'
       ? req.isEmergency
@@ -1417,6 +1494,12 @@ function renderRequestCard(req, showActions) {
         `
         : `
           <div class="card-actions">
+            <button
+              class="work-log-btn"
+              onclick="openWorkLogModal(${Number(req.rowNumber)})"
+            >
+              🛠 Ход работ
+            </button>
             <button
               class="plan-btn"
               onclick="openPlanModal(
@@ -1478,6 +1561,7 @@ function renderRequestCard(req, showActions) {
       </div>
 
       ${photoGalleries}
+      ${workLog}
 
       <div class="request-footer">
         <span class="badge">
@@ -2988,9 +3072,11 @@ function dateInputValue(date) {
 }
 
 function houseReportTimelineEvents(req) {
-  if (!req || !req.isEmergency || !Array.isArray(req.emergencyTimeline)) return [];
+  if (!req || !Array.isArray(req.emergencyTimeline)) return [];
   return req.emergencyTimeline.filter(function(item) {
-    return item && (item.stage || item.comment || item.date);
+    if (!item || !(item.stage || item.comment || item.date)) return false;
+    if (req.isEmergency) return true;
+    return item.stage === 'WORK_LOG';
   });
 }
 
@@ -3000,7 +3086,7 @@ function renderHouseReportTimeline(req) {
 
   return `
     <div class="house-report-timeline">
-      <div class="house-report-subtitle">🚨 Хронология аварии</div>
+      <div class="house-report-subtitle">${req.isEmergency ? '🚨 Хронология аварии' : '🛠 Ход работ'}</div>
       ${events.map(function(item) {
         return `
           <div class="house-report-timeline-item">
@@ -3262,7 +3348,7 @@ function houseReportText(options) {
     lines.push(String(req.description || ''));
 
     if (timeline.length) {
-      lines.push('🚨 Хронология аварии:');
+      lines.push(req.isEmergency ? '🚨 Хронология аварии:' : '🛠 Ход работ:');
       timeline.forEach(function(item) {
         const head = [item.date || '', item.stage || ''].filter(Boolean).join(' — ');
         if (head) lines.push('• ' + head);
@@ -3539,7 +3625,7 @@ function printReportTimelineHtml(req) {
   const events = houseReportTimelineEvents(req);
   if (!events.length) return '';
 
-  return '<div class="timeline"><strong>Хронология аварии:</strong>' +
+  return '<div class="timeline"><strong>' + (req.isEmergency ? 'Хронология аварии:' : 'Ход работ:') + '</strong>' +
     events.map(function(item) {
       const head = [item.date || '', item.stage || ''].filter(Boolean).join(' — ');
       return '<div class="timeline-item"><b>' + escapeHtml(head) + '</b>' +
