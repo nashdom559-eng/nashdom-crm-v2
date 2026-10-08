@@ -24,7 +24,7 @@
     <header class="header">
       <div>
         <div class="logo">🏠 НашДом CRM</div>
-        <div class="subtitle">НашДом CRM v2.0.21<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
+        <div class="subtitle">НашДом CRM v2.0.22<span id="pushStatusIcon" class="push-status-icon" title="Уведомления">🔕</span></div>
         <button class="key-btn" onclick="resetAccessKey()">Сменить ключ</button>
       </div>
     </header>
@@ -280,6 +280,19 @@
       </div>
     </div>
 
+
+    <div id="workLogModal" class="modal">
+      <div class="modal-box">
+        <h2>🛠 Ход работ</h2>
+        <label>Что сделано / что обнаружено</label>
+        <textarea id="workLogComment" placeholder="Например: расшили стояк, обнаружили повреждение фановой трубы. Нужно расшить ещё 1 метр."></textarea>
+        <div id="workLogActionStatus" class="modal-action-status" role="status" aria-live="polite"></div>
+        <div class="modal-actions">
+          <button type="button" class="modal-cancel" id="workLogCancelBtn" onclick="closeWorkLogModal()">Отмена</button>
+          <button type="button" class="modal-ok" id="workLogConfirmBtn" onclick="confirmWorkLog()">Добавить запись</button>
+        </div>
+      </div>
+    </div>
 
     <div id="editModal" class="modal">
       <div class="modal-box">
