@@ -15,6 +15,8 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.EditText;
+import android.content.SharedPreferences;
 
 public class MainActivity extends Activity {
     private static final int REQUEST_ROLE = 101;
@@ -34,7 +36,7 @@ public class MainActivity extends Activity {
         layout.addView(title);
 
         TextView description = new TextView(this);
-        description.setText("\nТест: определяем, передаёт ли Android входящий номер. Звонки не блокируются. База CRM пока не подключена.\n");
+        description.setText("\nТест: определяем, передаёт ли Android входящий номер. Звонки не блокируются. Для поиска по базе CRM потребуется ключ устройства.\n");
         description.setTextSize(16);
         layout.addView(description);
 
@@ -62,8 +64,28 @@ public class MainActivity extends Activity {
         });
         layout.addView(overlayButton);
 
+        EditText tokenInput = new EditText(this);
+        tokenInput.setSingleLine(true);
+        tokenInput.setTextSize(14);
+        tokenInput.setHint("Ключ устройства CRM (64 символа)");
+        tokenInput.setInputType(129);
+        tokenInput.setText(getSharedPreferences("caller_id",MODE_PRIVATE).getString("device_token",""));
+        layout.addView(tokenInput);
+        Button saveToken = new Button(this);
+        saveToken.setText("Сохранить ключ CRM");
+        saveToken.setOnClickListener(v -> {
+            String token = tokenInput.getText().toString().trim();
+            if (!token.matches("[a-fA-F0-9]{64}")) {
+                status.setText("Ключ должен содержать 64 шестнадцатеричных символа");
+                return;
+            }
+            getSharedPreferences("caller_id",MODE_PRIVATE).edit().putString("device_token",token).apply();
+            updateStatus();
+        });
+        layout.addView(saveToken);
+
         TextView hint = new TextView(this);
-        hint.setText("\nПосле разрешений попроси кого-нибудь позвонить с номера, которого нет в контактах. Приложение покажет уведомление «НашДом: входящий звонок». Если уведомления нет — открой приложение и проверь статус роли.");
+        hint.setText("\nПосле разрешений попроси кого-нибудь позвонить с номера, которого нет в контактах. Приложение покажет плашку с результатом поиска. Без ключа работает тестовое определение номера. Если уведомления нет — открой приложение и проверь статус роли.");
         layout.addView(hint);
 
         setContentView(layout);
