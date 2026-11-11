@@ -117,7 +117,7 @@ public class MainActivity extends Activity {
         RoleManager roles = (RoleManager) getSystemService(ROLE_SERVICE);
         boolean held = roles != null && roles.isRoleHeld(RoleManager.ROLE_CALL_SCREENING);
         boolean notifications = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-        status.setText("Определитель: " + (held ? "разрешён ✓" : "не назначен") + "\nУведомления: " + (notifications ? "разрешены ✓" : "не разрешены") + "\n");
+        status.setText("Определитель: " + (held ? "разрешён ✓" : "не назначен") + "\nУведомления: " + (notifications ? "разрешены ✓" : "не разрешены") + "\nCRM: " + (getSharedPreferences("caller_id",MODE_PRIVATE).getString("device_token","").length()==64 ? "ключ сохранён ✓" : "ключ не задан") + "\n");
     }
 
     @Override protected void onResume() {
