@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.net.Uri;
+import android.provider.Settings;
 import android.telecom.TelecomManager;
 import android.view.Gravity;
 import android.view.View;
@@ -49,6 +51,16 @@ public class MainActivity extends Activity {
         notificationButton.setText("Разрешить уведомления");
         notificationButton.setOnClickListener(v -> requestNotifications());
         layout.addView(notificationButton);
+
+        Button overlayButton = new Button(this);
+        overlayButton.setText("Разрешить показ поверх звонка");
+        overlayButton.setOnClickListener(v -> {
+            if (!Settings.canDrawOverlays(this)) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            } else updateStatus();
+        });
+        layout.addView(overlayButton);
 
         TextView hint = new TextView(this);
         hint.setText("\nПосле разрешений попроси кого-нибудь позвонить с номера, которого нет в контактах. Приложение покажет уведомление «НашДом: входящий звонок». Если уведомления нет — открой приложение и проверь статус роли.");
