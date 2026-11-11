@@ -133,6 +133,17 @@ async function action(name,p){
   if(!done&&p.planDate){ try{ const eventId=await createOrUpdateCalendarEvent('',id,S.ACCEPTED,p,p.planDate); await pool.query('UPDATE requests SET calendar_event_id=$1 WHERE id=$2',[eventId,id]); }catch(e){console.error('Calendar create error:',e.message||e);} }
   return {ok:true,id,rowNumber:row,message:done?`Запись сохранена № ${id}`:`Заявка принята № ${id}`};
  }
+ if(name==='createCallerDeviceToken'){
+  await callerDevicesReady;
+  const token=crypto.randomBytes(32).toString('hex');
+  await pool.query('INSERT INTO caller_id_devices(token_hash,label) VALUES($1,$2)',[callerHash(token),String(p.label||'Samsung').slice(0,80)]);
+  return {ok:true,token,message:'Ключ устройства создан. Сохрани его: повторно посмотреть нельзя.'};
+ }
+ if(name==='revokeCallerDeviceToken'){
+  await callerDevicesReady;
+  const x=await pool.query('UPDATE caller_id_devices SET revoked_at=now() WHERE token_hash=$1',[callerHash(String(p.token||''))]);
+  return {ok:true,revoked:x.rowCount>0};
+ }
  if(name==='registerPushToken'){ const token=String(p.token||'').trim(); if(!token)throw new Error('Пустой push-токен'); await pool.query(`INSERT INTO push_tokens(token,device_info) VALUES($1,$2) ON CONFLICT(token) DO UPDATE SET device_info=EXCLUDED.device_info,updated_at=now(),active=true`,[token,String(p.deviceInfo||'').slice(0,500)]); return {ok:true,message:'Уведомления включены'}; }
  if(name==='deleteEmergencyEvent'){ const id=String(p.eventId||'').trim(); if(!id)throw new Error('Не указана запись для удаления'); const x=await pool.query('DELETE FROM timeline WHERE id=$1',[id]); if(!x.rowCount)throw new Error('Запись хронологии не найдена'); return {ok:true,message:'Запись хронологии удалена'}; }
  const r=await findRequest(p); if(!r)throw new Error('Заявка не найдена');
@@ -176,6 +187,30 @@ async function action(name,p){
  if(name==='dispatchRequest'){ if(!String(p.executor||'').trim())throw new Error('Укажите исполнителя'); await pool.query('UPDATE requests SET priority=$1,executor=$2 WHERE id=$3',[p.category||'',p.executor||'',r.id]); await addTimeline(pool,r.id,'Передано исполнителю',[p.category?('Категория: '+p.category):'', 'Исполнитель: '+p.executor].filter(Boolean).join('\n')); return {ok:true,message:'Заявка передана: '+p.executor}; }
  throw new Error('Неизвестное действие API: '+name);
 }
+
+
+const callerDevicesReady=pool.query("CREATE TABLE IF NOT EXISTS caller_id_devices(token_hash text PRIMARY KEY,label text NOT NULL DEFAULT 'Android',created_at timestamptz NOT NULL DEFAULT now(),revoked_at timestamptz)").catch(e=>{console.error('Caller ID devices:',e.message);throw e;});
+function callerHash(token){return crypto.createHash('sha256').update(String(token)).digest('hex');}
+app.post('/api/caller-id/lookup',async(req,res)=>{
+ res.set('Cache-Control','no-store');
+ try{
+  const match=/^Bearer ([a-f0-9]{64})$/i.exec(String(req.headers.authorization||''));
+  if(!match)return res.status(401).json({ok:false,error:'Unauthorized'});
+  await callerDevicesReady;
+  const authorized=await pool.query('SELECT 1 FROM caller_id_devices WHERE token_hash=$1 AND revoked_at IS NULL',[callerHash(match[1])]);
+  if(!authorized.rowCount)return res.status(401).json({ok:false,error:'Unauthorized'});
+  const n=normalizePhone(req.body?.number||'');
+  if(n.length!==11||!n.startsWith('7'))return res.json({ok:true,status:'unknown',matches:[]});
+  const variants=[n,'8'+n.slice(1)];
+  const [rq,ct]=await Promise.all([
+   pool.query("SELECT id,house,flat,name,description,status,plan_date FROM requests WHERE regexp_replace(coalesce(phone,''),'[^0-9]','','g')=ANY($1) ORDER BY created_at DESC LIMIT 8",[variants]),
+   pool.query("SELECT house,flat,name FROM contacts WHERE regexp_replace(coalesce(phone,''),'[^0-9]','','g')=ANY($1) LIMIT 8",[variants])
+  ]);
+  const matches=rq.rows.map(x=>({house:x.house,flat:x.flat,name:x.name,requestId:x.id,description:String(x.description||'').slice(0,160),status:x.status,planDate:x.plan_date?fmt(x.plan_date):''}));
+  for(const x of ct.rows)if(!matches.some(y=>y.house===x.house&&y.flat===x.flat))matches.push({house:x.house,flat:x.flat,name:x.name,requestId:'',description:'',status:'',planDate:''});
+  res.json({ok:true,status:matches.length?'found':'unknown',matches:matches.slice(0,8)});
+ }catch(e){console.error('Caller lookup:',e.message);res.status(503).json({ok:false,error:'Service unavailable'});}
+});
 
 app.get('/health',async(req,res)=>{ try{await pool.query('SELECT 1');res.json({ok:true})}catch(e){res.status(500).json({ok:false,error:e.message})} });
 app.all('/api',async(req,res)=>{ const name=String(req.query.action||req.body?.action||''), callback=String(req.query.callback||req.body?.callback||''), p=parsePayload(req); try{
