@@ -20,6 +20,13 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.os.Handler;
 import android.os.Looper;
+import org.json.JSONObject;
+import org.json.JSONArray;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.io.OutputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 public class NashDomScreeningService extends CallScreeningService {
     private static final String CHANNEL_ID = "nashdom_incoming_test";
@@ -28,8 +35,17 @@ public class NashDomScreeningService extends CallScreeningService {
         // Never block, reject or silence a call.
         if (details.getCallDirection() == Call.Details.DIRECTION_INCOMING) {
             String number = details.getHandle() == null ? "" : details.getHandle().getSchemeSpecificPart();
-            showTestNotification(number);
-            showCallerOverlay(number);
+            String token=getSharedPreferences("caller_id",MODE_PRIVATE).getString("device_token","");
+            if(token.matches("[a-fA-F0-9]{64}")){
+                new Thread(()->{
+                    String info=lookupCRM(number,token);
+                    showTestNotification(number,info);
+                    showCallerOverlay(number,info);
+                }).start();
+            } else {
+                showTestNotification(number,"Тест определения номера · ключ CRM не задан");
+                showCallerOverlay(number,"Тест определения номера · ключ CRM не задан");
+            }
         }
         CallResponse response = new CallResponse.Builder()
                 .setDisallowCall(false)
@@ -41,7 +57,41 @@ public class NashDomScreeningService extends CallScreeningService {
         respondToCall(details, response);
     }
 
-    private void showCallerOverlay(String number) {
+    private String lookupCRM(String number,String token){
+        HttpURLConnection connection=null;
+        try{
+            URL url=new URL("https://135-106-211-116.sslip.io/api/caller-id/lookup");
+            connection=(HttpURLConnection)url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(1700);
+            connection.setReadTimeout(1700);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type","application/json; charset=utf-8");
+            connection.setRequestProperty("Authorization","Bearer "+token);
+            byte[] body=new JSONObject().put("number",number).toString().getBytes(StandardCharsets.UTF_8);
+            try(OutputStream out=connection.getOutputStream()){out.write(body);}
+            int status=connection.getResponseCode();
+            if(status==401)return "Ключ CRM не принят";
+            if(status!=200)return "CRM временно недоступна";
+            try(InputStream in=connection.getInputStream()){
+                java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();
+                byte[] buf=new byte[1024];int n;
+                while((n=in.read(buf))!=-1 && bytes.size()<16384)bytes.write(buf,0,n);
+                JSONObject data=new JSONObject(bytes.toString("UTF-8"));
+                if(!data.optBoolean("ok"))return "CRM временно недоступна";
+                JSONArray matches=data.optJSONArray("matches");
+                if(matches==null||matches.length()==0)return "В базе НашДом не найден";
+                JSONObject first=matches.getJSONObject(0);
+                String location=first.optString("house")+" · кв. "+first.optString("flat");
+                String name=first.optString("name");
+                String extra=matches.length()>1?" · ещё совпадений: "+(matches.length()-1):"";
+                return location+(name.isEmpty()?"":" · "+name)+extra;
+            }
+        }catch(Exception e){return "CRM временно недоступна";}
+        finally{if(connection!=null)connection.disconnect();}
+    }
+
+    private void showCallerOverlay(String number,String info) {
         if (!Settings.canDrawOverlays(this)) return;
         Handler main = new Handler(Looper.getMainLooper());
         main.post(() -> {
@@ -56,12 +106,12 @@ public class NashDomScreeningService extends CallScreeningService {
                 background.setCornerRadius(24);
                 panel.setBackground(background);
                 TextView title = new TextView(this);
-                title.setText("🏠 НашДом · определитель работает");
+                title.setText("🏠 НашДом · входящий звонок");
                 title.setTextColor(Color.WHITE);
                 title.setTextSize(17);
                 panel.addView(title);
                 TextView subtitle = new TextView(this);
-                subtitle.setText((TextUtils.isEmpty(number) ? "Скрытый номер" : number) + " · база CRM пока не подключена");
+                subtitle.setText((TextUtils.isEmpty(number) ? "Скрытый номер" : number) + " · " + info);
                 subtitle.setTextColor(Color.WHITE);
                 subtitle.setTextSize(14);
                 panel.addView(subtitle);
@@ -85,7 +135,7 @@ public class NashDomScreeningService extends CallScreeningService {
         });
     }
 
-    private void showTestNotification(String number) {
+    private void showTestNotification(String number,String info) {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager == null) return;
@@ -95,8 +145,8 @@ public class NashDomScreeningService extends CallScreeningService {
         Notification notification = new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.sym_call_incoming)
                 .setContentTitle("НашДом: входящий звонок")
-                .setContentText(safeNumber + " — тест определения номера")
-                .setStyle(new Notification.BigTextStyle().bigText(safeNumber + " — номер получен Android. База CRM ещё не подключена."))
+                .setContentText(safeNumber + " — " + info)
+                .setStyle(new Notification.BigTextStyle().bigText(safeNumber + " — " + info))
                 .setAutoCancel(true)
                 .build();
         manager.notify(1001, notification);
