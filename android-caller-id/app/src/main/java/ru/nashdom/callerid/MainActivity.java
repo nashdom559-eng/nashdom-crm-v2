@@ -84,6 +84,37 @@ public class MainActivity extends Activity {
         });
         layout.addView(saveToken);
 
+        EditText testNumber = new EditText(this);
+        testNumber.setSingleLine(true);
+        testNumber.setHint("Номер для проверки (например, +79990000000)");
+        testNumber.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
+        layout.addView(testNumber);
+        Button testButton = new Button(this);
+        testButton.setText("Проверить подключение к CRM");
+        layout.addView(testButton);
+        TextView testResult = new TextView(this);
+        testResult.setTextSize(16);
+        layout.addView(testResult);
+        testButton.setOnClickListener(v -> {
+            String token = getSharedPreferences("caller_id", MODE_PRIVATE).getString("device_token", "");
+            if (!token.matches("[a-fA-F0-9]{64}")) {
+                testResult.setText("Сначала сохрани ключ CRM");
+                return;
+            }
+            String number = testNumber.getText().toString().trim();
+            if (number.isEmpty()) number = "+79990000000";
+            final String lookupNumber = number;
+            testButton.setEnabled(false);
+            testResult.setText("Проверяю соединение...");
+            new Thread(() -> {
+                String result = NashDomScreeningService.lookupCRM(lookupNumber, token);
+                runOnUiThread(() -> {
+                    testResult.setText(result);
+                    testButton.setEnabled(true);
+                });
+            }).start();
+        });
+
         TextView hint = new TextView(this);
         hint.setText("\nПосле разрешений попроси кого-нибудь позвонить с номера, которого нет в контактах. Приложение покажет плашку с результатом поиска. Без ключа работает тестовое определение номера. Если уведомления нет — открой приложение и проверь статус роли.");
         layout.addView(hint);
