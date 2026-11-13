@@ -57,14 +57,14 @@ public class NashDomScreeningService extends CallScreeningService {
         respondToCall(details, response);
     }
 
-    private String lookupCRM(String number,String token){
+    public static String lookupCRM(String number,String token){
         HttpURLConnection connection=null;
         try{
             URL url=new URL("https://135-106-211-116.sslip.io/api/caller-id/lookup");
             connection=(HttpURLConnection)url.openConnection();
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(1700);
-            connection.setReadTimeout(1700);
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type","application/json; charset=utf-8");
             connection.setRequestProperty("Authorization","Bearer "+token);
@@ -72,7 +72,7 @@ public class NashDomScreeningService extends CallScreeningService {
             try(OutputStream out=connection.getOutputStream()){out.write(body);}
             int status=connection.getResponseCode();
             if(status==401)return "Ключ CRM не принят";
-            if(status!=200)return "CRM временно недоступна";
+            if(status!=200)return "CRM: HTTP "+status;
             try(InputStream in=connection.getInputStream()){
                 java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();
                 byte[] buf=new byte[1024];int n;
@@ -87,7 +87,7 @@ public class NashDomScreeningService extends CallScreeningService {
                 String extra=matches.length()>1?" · ещё совпадений: "+(matches.length()-1):"";
                 return location+(name.isEmpty()?"":" · "+name)+extra;
             }
-        }catch(Exception e){return "CRM временно недоступна";}
+        }catch(Exception e){return "Ошибка соединения: "+e.getClass().getSimpleName()+(e.getMessage()==null?"":(" — "+e.getMessage()));}
         finally{if(connection!=null)connection.disconnect();}
     }
 
